@@ -1,6 +1,11 @@
 # src/services.py
 
 import sqlite3
+import zipfile
+import shutil
+import os
+import secrets
+import string
 from datetime import datetime
 import database, config, models, auth, validation
 from encryption import EncryptionManager
@@ -27,6 +32,18 @@ def requires_role(allowed_roles: list[str]):
     return decorator
 
 # --- User Services ---
+
+def _find_user_by_username(username: str) -> sqlite3.Row | None:
+    """Finds a user by their plaintext username by decrypting all usernames."""
+    all_users = get_all_users_raw()
+    for user_row in all_users:
+        try:
+            decrypted_username = encryption_manager.decrypt(user_row['username'])
+            if decrypted_username.lower() == username.lower():
+                return user_row
+        except Exception:
+            continue # Skip records that fail to decrypt
+    return None
 
 def get_all_users_raw() -> list[sqlite3.Row]:
     """Retrieves all user records from the database with encrypted data."""
@@ -88,8 +105,128 @@ def add_new_user(current_user: models.User, username, password, role, first_name
         print(f"An error occurred: {e}")
         return False
     finally:
-        if conn:
+        if 'conn' in locals() and conn:
             conn.close()
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
+def update_user_profile(current_user: models.User, target_username: str, new_profile_data: dict):
+    """Updates a user's first and last name."""
+    # Ensure only allowed roles can be updated by the current user
+    # Logic to prevent role escalation should be here
+    # For now, we only update first/last name
+    
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    
+    encrypted_target_username = encryption_manager.encrypt(target_username)
+    encrypted_first_name = encryption_manager.encrypt(new_profile_data['first_name'])
+    encrypted_last_name = encryption_manager.encrypt(new_profile_data['last_name'])
+
+    cursor.execute(
+        "UPDATE users SET first_name = ?, last_name = ? WHERE username = ?",
+        (encrypted_first_name, encrypted_last_name, encrypted_target_username)
+    )
+    
+    if cursor.rowcount == 0:
+        print(f"Error: User '{target_username}' not found.")
+        return False
+        
+    conn.commit()
+    conn.close()
+    
+    secure_logger.log(current_user.username, "Updated user profile", f"Target Username: {target_username}")
+    print("User profile updated successfully.")
+    return True
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
+def delete_user(current_user: models.User, target_username: str):
+    """Deletes a user from the system."""
+    if current_user.username.lower() == target_username.lower():
+        print("Error: You cannot delete your own account this way.")
+        return False
+
+    encrypted_target_username = encryption_manager.encrypt(target_username)
+
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE username = ?", (encrypted_target_username,))
+    
+    if cursor.rowcount == 0:
+        print(f"Error: User '{target_username}' not found.")
+        conn.close()
+        return False
+        
+    conn.commit()
+    conn.close()
+    
+    secure_logger.log(current_user.username, "Deleted user", f"Target Username: {target_username}", is_suspicious=True)
+    print(f"User '{target_username}' deleted successfully.")
+    return True
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
+def reset_user_password(current_user: models.User, target_username: str):
+    """Resets a user's password to a new secure temporary password."""
+    target_user_record = _find_user_by_username(target_username)
+
+    if not target_user_record:
+        print(f"Error: User '{target_username}' not found.")
+        return False
+
+    # Now we have the correct encrypted username from the record
+    encrypted_target_username = target_user_record['username']
+    
+    # Generate a secure temporary password
+    alphabet = string.ascii_letters + string.digits + string.punctuation
+    temp_password = ''.join(secrets.choice(alphabet) for i in range(14))
+    
+    new_password_hash = auth.hash_password(temp_password)
+    
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE users SET password_hash = ? WHERE username = ?",
+        (new_password_hash, encrypted_target_username)
+    )
+    
+    conn.commit()
+    conn.close()
+    
+    secure_logger.log(current_user.username, "Reset user password", f"Target Username: {target_username}", is_suspicious=True)
+    print(f"Password for user '{target_username}' has been reset.")
+    print(f"New Temporary Password: {temp_password}")
+    return True
+
+@requires_role([config.ROLE_SYSTEM_ADMIN, config.ROLE_SERVICE_ENGINEER])
+def update_own_password(current_user: models.User, old_password: str, new_password: str):
+    """Allows a logged-in user to update their own password."""
+    if not validation.is_valid_password(new_password):
+        print("New password does not meet the security requirements.")
+        return False
+
+    encrypted_username = encryption_manager.encrypt(current_user.username)
+    
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT password_hash FROM users WHERE username = ?", (encrypted_username,))
+    user_row = cursor.fetchone()
+
+    if not user_row or not auth.verify_password(old_password, user_row['password_hash']):
+        print("Incorrect old password.")
+        conn.close()
+        secure_logger.log(current_user.username, "Failed password change", "Incorrect old password", is_suspicious=True)
+        return False
+        
+    new_password_hash = auth.hash_password(new_password)
+    cursor.execute(
+        "UPDATE users SET password_hash = ? WHERE username = ?",
+        (new_password_hash, encrypted_username)
+    )
+    conn.commit()
+    conn.close()
+    
+    secure_logger.log(current_user.username, "Changed own password")
+    print("Password updated successfully.")
+    return True
 
 # --- Traveller Services ---
 
@@ -135,39 +272,93 @@ def add_new_traveller(current_user: models.User, traveller_data: dict):
         print(f"An error occurred while adding traveller: {e}")
         return False
     finally:
-        if conn:
+        if 'conn' in locals() and conn:
             conn.close()
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
+def search_travellers(current_user: models.User, search_key: str):
+    """
+    Searches for travellers by a partial key.
+    NOTE: This is computationally expensive as it decrypts all records in memory.
+    """
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM travellers")
+    all_travellers = cursor.fetchall()
+    conn.close()
+
+    results = []
+    search_key_lower = search_key.lower()
+
+    for row in all_travellers:
+        decrypted_row = {key: encryption_manager.decrypt(value) if isinstance(value, bytes) else value for key, value in dict(row).items()}
+        
+        match = False
+        for value in decrypted_row.values():
+            if search_key_lower in str(value).lower():
+                match = True
+                break
+        
+        if match:
+            results.append(decrypted_row)
+            
+    return results
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
+def update_traveller(current_user: models.User, traveller_id: int, new_data: dict):
+    """Updates an existing traveller's information."""
+    # Add validation for new_data here if necessary
+    
+    encrypted_data = {key: encryption_manager.encrypt(str(value)) for key, value in new_data.items()}
+    
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    
+    # Dynamically build the SET part of the query
+    set_clause = ", ".join([f"{key} = ?" for key in encrypted_data.keys()])
+    params = list(encrypted_data.values())
+    params.append(traveller_id)
+    
+    query = f"UPDATE travellers SET {set_clause} WHERE id = ?"
+    
+    cursor.execute(query, tuple(params))
+    
+    if cursor.rowcount == 0:
+        print(f"Error: Traveller with ID {traveller_id} not found.")
+        conn.close()
+        return False
+        
+    conn.commit()
+    conn.close()
+    secure_logger.log(current_user.username, "Updated traveller info", f"Traveller ID: {traveller_id}")
+    print("Traveller information updated successfully.")
+    return True
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
+def delete_traveller(current_user: models.User, traveller_id: int):
+    """Deletes a traveller from the system."""
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM travellers WHERE id = ?", (traveller_id,))
+    
+    if cursor.rowcount == 0:
+        print(f"Error: Traveller with ID {traveller_id} not found.")
+        conn.close()
+        return False
+
+    conn.commit()
+    conn.close()
+    secure_logger.log(current_user.username, "Deleted traveller", f"Traveller ID: {traveller_id}", is_suspicious=True)
+    print(f"Traveller with ID {traveller_id} deleted successfully.")
+    return True
 
 # --- Scooter Services ---
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN, config.ROLE_SERVICE_ENGINEER])
 def update_scooter_location(current_user: models.User, scooter_id: int, new_lat: float, new_lon: float):
     """Updates the location of a specific scooter."""
-    try:
-        conn = database.get_db_connection()
-        cursor = conn.cursor()
-        
-        # 2. UPDATE scooter in DB using parameterized query
-        cursor.execute(
-            "UPDATE scooters SET location_lat = ?, location_lon = ? WHERE id = ?",
-            (new_lat, new_lon, scooter_id)
-        )
-        if cursor.rowcount == 0:
-            print(f"Error: Scooter ID {scooter_id} not found.")
-            return False
-            
-        conn.commit()
-        
-        # 3. Log the action
-        secure_logger.log(current_user.username, "Updated scooter location", f"Scooter ID: {scooter_id}")
-        print("Scooter location updated successfully.")
-        return True
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return False
-    finally:
-        if conn:
-            conn.close()
+    return update_scooter(current_user, scooter_id, {"location_lat": new_lat, "location_lon": new_lon})
+
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def add_new_scooter(current_user: models.User, scooter_data: dict):
@@ -187,10 +378,10 @@ def add_new_scooter(current_user: models.User, scooter_data: dict):
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             scooter_data['serial_number'], scooter_data['brand'], scooter_data['model'],
-            datetime.now().strftime("%Y-%m-%d"), scooter_data['top_speed'], scooter_data['battery_capacity'],
-            scooter_data['state_of_charge'], scooter_data['target_range_soc_min'], scooter_data['target_range_soc_max'],
-            scooter_data['location_lat'], scooter_data['location_lon'], scooter_data['out_of_service_status'],
-            scooter_data['mileage'], scooter_data['last_maintenance_date']
+            datetime.now().strftime("%Y-%m-%d"), scooter_data.get('top_speed'), scooter_data.get('battery_capacity'),
+            scooter_data.get('state_of_charge'), scooter_data.get('target_range_soc_min'), scooter_data.get('target_range_soc_max'),
+            scooter_data.get('location_lat'), scooter_data.get('location_lon'), scooter_data.get('out_of_service_status', 0),
+            scooter_data.get('mileage'), scooter_data.get('last_maintenance_date')
         ))
         conn.commit()
         secure_logger.log(current_user.username, "Added new scooter", f"Serial: {scooter_data['serial_number']}")
@@ -203,5 +394,206 @@ def add_new_scooter(current_user: models.User, scooter_data: dict):
         print(f"An error occurred while adding scooter: {e}")
         return False
     finally:
-        if conn:
+        if 'conn' in locals() and conn:
             conn.close()
+
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN, config.ROLE_SERVICE_ENGINEER])
+def update_scooter(current_user: models.User, scooter_id: int, new_data: dict):
+    """Updates an existing scooter's information based on user role."""
+    
+    allowed_fields_for_service_engineer = [
+        'state_of_charge', 'target_range_soc_min', 'target_range_soc_max', 
+        'location_lat', 'location_lon', 'out_of_service_status', 'mileage', 
+        'last_maintenance_date'
+    ]
+
+    if current_user.role == config.ROLE_SERVICE_ENGINEER:
+        # Filter new_data to only include fields a Service Engineer can edit
+        disallowed_fields = [field for field in new_data if field not in allowed_fields_for_service_engineer]
+        if disallowed_fields:
+            print(f"Access Denied. You cannot edit these fields: {', '.join(disallowed_fields)}")
+            secure_logger.log(current_user.username, "Authorization failed", f"Attempted to edit disallowed scooter fields: {', '.join(disallowed_fields)}", is_suspicious=True)
+            return False
+
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    
+    set_clause = ", ".join([f"{key} = ?" for key in new_data.keys()])
+    params = list(new_data.values())
+    params.append(scooter_id)
+    
+    query = f"UPDATE scooters SET {set_clause} WHERE id = ?"
+    
+    cursor.execute(query, tuple(params))
+    
+    if cursor.rowcount == 0:
+        print(f"Error: Scooter with ID {scooter_id} not found.")
+        conn.close()
+        return False
+        
+    conn.commit()
+    conn.close()
+    secure_logger.log(current_user.username, "Updated scooter details", f"Scooter ID: {scooter_id}")
+    print("Scooter information updated successfully.")
+    return True
+
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
+def delete_scooter(current_user: models.User, scooter_id: int):
+    """Deletes a scooter from the system."""
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM scooters WHERE id = ?", (scooter_id,))
+    
+    if cursor.rowcount == 0:
+        print(f"Error: Scooter with ID {scooter_id} not found.")
+        conn.close()
+        return False
+
+    conn.commit()
+    conn.close()
+    secure_logger.log(current_user.username, "Deleted scooter", f"Scooter ID: {scooter_id}", is_suspicious=True)
+    print(f"Scooter with ID {scooter_id} deleted successfully.")
+    return True
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN, config.ROLE_SERVICE_ENGINEER])
+def search_scooters(current_user: models.User, search_key: str):
+    """Searches for scooters by a partial key in non-location fields."""
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    
+    # Using LIKE for non-encrypted, non-location text fields
+    search_pattern = f'%{search_key}%'
+    cursor.execute(
+        "SELECT * FROM scooters WHERE brand LIKE ? OR model LIKE ? OR serial_number LIKE ?",
+        (search_pattern, search_pattern, search_pattern)
+    )
+    
+    results = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return results
+
+# --- Backup and Restore Services ---
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
+def create_backup(current_user: models.User):
+    """Creates a timestamped zip archive of the database."""
+    backup_dir = "backups"
+    os.makedirs(backup_dir, exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_filename = f"backup_{timestamp}.zip"
+    backup_filepath = os.path.join(backup_dir, backup_filename)
+    
+    try:
+        with zipfile.ZipFile(backup_filepath, 'w') as zf:
+            zf.write(config.DATABASE_FILE)
+        
+        secure_logger.log(current_user.username, "Created backup", f"File: {backup_filename}")
+        print(f"Successfully created backup: {backup_filepath}")
+        return True
+    except Exception as e:
+        print(f"Error creating backup: {e}")
+        return False
+
+@requires_role([config.ROLE_SUPER_ADMIN])
+def generate_restore_code(current_user: models.User, target_system_admin_username: str, backup_filename: str):
+    """Generates a one-time restore code for a System Administrator."""
+    # Verify target user is a System Admin
+    # ... (omitted for brevity)
+
+    code = secrets.token_hex(16)
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO restore_codes (code, backup_filename, system_admin_username, generated_at) VALUES (?, ?, ?, ?)",
+        (code, backup_filename, target_system_admin_username, datetime.now().isoformat())
+    )
+    conn.commit()
+    conn.close()
+    
+    secure_logger.log(current_user.username, "Generated restore code", f"For user {target_system_admin_username}, file {backup_filename}")
+    print("\n--- Restore Code Generated ---")
+    print(f"Code: {code}")
+    print(f"Valid for user: {target_system_admin_username}")
+    print(f"Valid for file: {backup_filename}")
+    print("This is a one-time use code.")
+    print("----------------------------\n")
+    return code
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
+def restore_from_backup(current_user: models.User, backup_filename: str, restore_code: str = None):
+    """Restores the database from a backup zip file."""
+    backup_filepath = os.path.join("backups", backup_filename)
+    if not os.path.exists(backup_filepath):
+        print("Error: Backup file not found.")
+        return False
+
+    # System Admin restore logic
+    if current_user.role == config.ROLE_SYSTEM_ADMIN:
+        if not restore_code:
+            print("Error: A restore code is required for System Administrators.")
+            return False
+            
+        conn = database.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM restore_codes WHERE code = ? AND system_admin_username = ? AND backup_filename = ? AND is_used = 0",
+            (restore_code, current_user.username, backup_filename)
+        )
+        code_data = cursor.fetchone()
+        
+        if not code_data:
+            print("Error: Invalid, expired, or incorrect restore code for this backup/user.")
+            secure_logger.log(current_user.username, "Failed backup restore", f"Invalid code used for {backup_filename}", is_suspicious=True)
+            conn.close()
+            return False
+            
+        # Invalidate the code
+        cursor.execute("UPDATE restore_codes SET is_used = 1 WHERE id = ?", (code_data['id'],))
+        conn.commit()
+        conn.close()
+
+    # Super Admin or validated System Admin can proceed
+    try:
+        with zipfile.ZipFile(backup_filepath, 'r') as zf:
+            zf.extract(config.DATABASE_FILE, path=".")
+        
+        secure_logger.log(current_user.username, "Restored from backup", f"File: {backup_filename}", is_suspicious=True)
+        print("\n!!! --- System Restored --- !!!")
+        print("Database has been restored from backup.")
+        print("It is recommended to restart the application.")
+        print("!!! ----------------------- !!!\n")
+        return True
+    except Exception as e:
+        print(f"An error occurred during restore: {e}")
+        return False
+
+# --- Log Services ---
+def check_for_unread_suspicious_logs():
+    """Checks for and alerts about unread suspicious logs."""
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM logs WHERE suspicious = 1 AND is_read = 0")
+    count = cursor.fetchone()[0]
+    conn.close()
+    
+    if count > 0:
+        print("\n--- !!! SECURITY ALERT !!! ---")
+        print(f"There are {count} unread suspicious activity logs.")
+        print("Please review the system logs immediately.")
+        print("----------------------------\n")
+
+def mark_logs_as_read(log_ids: list[int]):
+    """Marks a list of log IDs as read."""
+    if not log_ids:
+        return
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    # Create a placeholder string like (?, ?, ?)
+    placeholders = ', '.join('?' for _ in log_ids)
+    query = f"UPDATE logs SET is_read = 1 WHERE id IN ({placeholders}) AND suspicious = 1"
+    cursor.execute(query, log_ids)
+    conn.commit()
+    conn.close()

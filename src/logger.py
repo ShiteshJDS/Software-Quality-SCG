@@ -24,9 +24,10 @@ class SecureLogger:
         # Store the encrypted blob in the database
         conn = database.get_db_connection()
         cursor = conn.cursor()
+        # MODIFIED: Added the `is_read` column to the INSERT statement
         cursor.execute(
-            "INSERT INTO logs (date, time, username, description_of_activity, additional_information, suspicious) VALUES (?, ?, ?, ?, ?, ?)",
-            (date, time, encrypted_username, encrypted_activity_desc, encrypted_additional_info, 1 if is_suspicious else 0)
+            "INSERT INTO logs (date, time, username, description_of_activity, additional_information, suspicious, is_read) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (date, time, encrypted_username, encrypted_activity_desc, encrypted_additional_info, 1 if is_suspicious else 0, 0)
         )
         conn.commit()
         conn.close()
@@ -37,7 +38,8 @@ class SecureLogger:
         """
         conn = database.get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM logs ORDER BY date DESC, time DESC LIMIT ?", (limit,))
+        # MODIFIED: Select all columns including the new ones
+        cursor.execute("SELECT * FROM logs ORDER BY id DESC LIMIT ?", (limit,))
         
         decrypted_logs = []
         rows = cursor.fetchall()
@@ -49,7 +51,8 @@ class SecureLogger:
                 "username": self.encryption_manager.decrypt(row["username"]),
                 "activity_description": self.encryption_manager.decrypt(row["description_of_activity"]),
                 "additional_info": self.encryption_manager.decrypt(row["additional_information"]),
-                "is_suspicious": "Yes" if row["suspicious"] == 1 else "No"
+                "is_suspicious": "Yes" if row["suspicious"] == 1 else "No",
+                "is_read": "Yes" if row["is_read"] == 1 else "No"
             }
             decrypted_logs.append(decrypted_log)
             
