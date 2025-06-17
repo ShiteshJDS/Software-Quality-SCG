@@ -191,10 +191,12 @@ def show_service_engineer_menu(current_user: models.User):
     """Displays the menu for Service Engineers."""
     while True:
         print_header(f"Service Engineer Menu | Logged in as: {current_user.username}")
+        print("\n--- Scooter Management ---")
         print("1. Update Scooter Details")
         print("2. Search for Scooter")
-        print("8. Update My Password")
-        print("9. Logout")
+        print("\n--- Self-Service ---")
+        print("3. Update My Password")
+        print("4. Logout")
         choice = input("Enter your choice: ")
         
         if choice == '1':
@@ -205,9 +207,113 @@ def show_service_engineer_menu(current_user: models.User):
             key = input("Enter search key (brand, model, or serial number): ")
             results = services.search_scooters(current_user, key)
             display_results(results)
-        elif choice == '8':
+        elif choice == '3':
             handle_update_own_password(current_user)
+        elif choice == '4':
+            print("Logging out...")
+            services.secure_logger.log(current_user.username, "Logged out")
+            break
+        else:
+            print("Invalid choice. Please try again.")
+
+
+def show_super_admin_menu(current_user: models.User):
+    """Displays the menu for the Super Administrator."""
+    while True:
+        print_header(f"Super Admin Menu | Logged in as: {current_user.username}")
+        print("\n--- Traveller Management ---")
+        print("1. Add New Traveller - Register a new traveller with all required personal and contact details.")
+        print("2. Search for Traveller - Find travellers by any information (name, email, etc.).")
+        print("3. Update Traveller - Modify details of an existing traveller.")
+        print("4. Delete Traveller - Remove a traveller from the system.")
+
+        print("\n--- Scooter Management ---")
+        print("5. Add New Scooter - Register a new scooter with technical and location details.")
+        print("6. Update Scooter Details - Change information or status of a scooter.")
+        print("7. Delete Scooter - Remove a scooter from the fleet.")
+        print("8. Search for Scooter - Find scooters by brand, model, or serial number.")
+
+        print("\n--- User Management ---")
+        print("9. Add New User (Service Engineer) - Create a new Service Engineer account.")
+        print("10. Reset User Password - Reset the password for an existing user.")
+        print("11. Add New User (System Admin or Service Engineer) - Create a new System Admin or Service Engineer account.")
+
+        print("\n--- System & Self-Service ---")
+        print("12. View System Logs - Display recent system logs and mark suspicious logs as read.")
+        print("13. Create Backup - Generate a backup of the system database.")
+        print("14. Restore From Backup - Restore the system from a backup file.")
+        print("15. Generate Restore Code for System Admin - Generate a one-time restore code for a System Admin user.")
+        print("16. Update My Password - Change your own account password.")
+        print("17. Logout - Log out of the system and return to the login screen.")
+
+        choice = input("Enter your choice: ")
+        # Map new numbers to old logic
+        if choice == '1':
+            traveller_data = prompt_for_new_traveller()
+            if traveller_data:
+                services.add_new_traveller(current_user, traveller_data)
+        elif choice == '2':
+            key = input("Enter search key (any traveller info): ")
+            results = services.search_travellers(current_user, key)
+            display_results(results)
+        elif choice == '3':
+            try:
+                trav_id = int(input("Enter Traveller ID to update: "))
+                new_data = prompt_for_new_traveller()
+                if new_data:
+                    services.update_traveller(current_user, trav_id, new_data)
+            except ValueError:
+                print("Invalid ID.")
+        elif choice == '4':
+            try:
+                trav_id = int(input("Enter Traveller ID to delete: "))
+                services.delete_traveller(current_user, trav_id)
+            except ValueError:
+                print("Invalid ID.")
+        elif choice == '5':
+            scooter_data = prompt_for_new_scooter()
+            if scooter_data:
+                services.add_new_scooter(current_user, scooter_data)
+        elif choice == '6':
+            scooter_id, update_data = prompt_for_scooter_update(current_user)
+            if scooter_id and update_data:
+                services.update_scooter(current_user, scooter_id, update_data)
+        elif choice == '7':
+            try:
+                scooter_id = int(input("Enter Scooter ID to delete: "))
+                services.delete_scooter(current_user, scooter_id)
+            except ValueError:
+                print("Invalid ID.")
+        elif choice == '8':
+            key = input("Enter search key (brand, model, or serial number): ")
+            results = services.search_scooters(current_user, key)
+            display_results(results)
         elif choice == '9':
+            user_data = prompt_for_new_user(current_user.role)
+            if user_data:
+                services.add_new_user(current_user, **user_data)
+        elif choice == '10':
+            target_user = input("Enter username to reset password for: ")
+            services.reset_user_password(current_user, target_user)
+        elif choice == '11':
+            user_data = prompt_for_new_user(current_user.role)
+            if user_data:
+                services.add_new_user(current_user, **user_data)
+        elif choice == '12':
+            handle_view_logs(current_user)
+        elif choice == '13':
+            services.create_backup(current_user)
+        elif choice == '14':
+            filename = input("Enter backup filename (e.g., backup_20250617_103000.zip): ")
+            code = input("Enter one-time restore code (press Enter if not required): ")
+            services.restore_from_backup(current_user, filename, code or None)
+        elif choice == '15':
+            target_user = input("Enter System Admin username to generate code for: ")
+            backup_file = input("Enter the exact backup filename the code is for: ")
+            services.generate_restore_code(current_user, target_user, backup_file)
+        elif choice == '16':
+            handle_update_own_password(current_user)
+        elif choice == '17':
             print("Logging out...")
             services.secure_logger.log(current_user.username, "Logged out")
             break
@@ -225,25 +331,24 @@ def show_system_admin_menu(current_user: models.User):
         print("4. Delete Traveller - Remove a traveller from the system.")
 
         print("\n--- Scooter Management ---")
-        print("10. Add New Scooter - Register a new scooter with technical and location details.")
-        print("11. Update Scooter Details - Change information or status of a scooter.")
-        print("12. Delete Scooter - Remove a scooter from the fleet.")
-        print("13. Search for Scooter - Find scooters by brand, model, or serial number.")
+        print("5. Add New Scooter - Register a new scooter with technical and location details.")
+        print("6. Update Scooter Details - Change information or status of a scooter.")
+        print("7. Delete Scooter - Remove a scooter from the fleet.")
+        print("8. Search for Scooter - Find scooters by brand, model, or serial number.")
 
         print("\n--- User Management ---")
-        print("20. Add New User (Service Engineer) - Create a new Service Engineer account.")
-        print("21. Reset User Password - Reset the password for an existing user.")
+        print("9. Add New User (Service Engineer) - Create a new Service Engineer account.")
+        print("10. Reset User Password - Reset the password for an existing user.")
 
         print("\n--- System & Self-Service ---")
-        print("80. View System Logs - Display recent system logs and mark suspicious logs as read.")
-        print("81. Create Backup - Generate a backup of the system database.")
-        print("82. Restore From Backup - Restore the system from a backup file.")
-        print("88. Update My Password - Change your own account password.")
-        print("99. Logout - Log out of the system and return to the login screen.")
-        
+        print("11. View System Logs - Display recent system logs and mark suspicious logs as read.")
+        print("12. Create Backup - Generate a backup of the system database.")
+        print("13. Restore From Backup - Restore the system from a backup file.")
+        print("14. Update My Password - Change your own account password.")
+        print("15. Logout - Log out of the system and return to the login screen.")
+
         choice = input("Enter your choice: ")
-        
-        # Traveller Actions
+        # Map new numbers to old logic
         if choice == '1':
             traveller_data = prompt_for_new_traveller()
             if traveller_data:
@@ -255,7 +360,6 @@ def show_system_admin_menu(current_user: models.User):
         elif choice == '3':
             try:
                 trav_id = int(input("Enter Traveller ID to update: "))
-                # Simplified update - re-enter all data
                 new_data = prompt_for_new_traveller()
                 if new_data:
                     services.update_traveller(current_user, trav_id, new_data)
@@ -267,102 +371,42 @@ def show_system_admin_menu(current_user: models.User):
                 services.delete_traveller(current_user, trav_id)
             except ValueError:
                 print("Invalid ID.")
-
-        # Scooter Actions
-        elif choice == '10':
+        elif choice == '5':
             scooter_data = prompt_for_new_scooter()
             if scooter_data:
                 services.add_new_scooter(current_user, scooter_data)
-        elif choice == '11':
+        elif choice == '6':
             scooter_id, update_data = prompt_for_scooter_update(current_user)
             if scooter_id and update_data:
                 services.update_scooter(current_user, scooter_id, update_data)
-        elif choice == '12':
+        elif choice == '7':
             try:
                 scooter_id = int(input("Enter Scooter ID to delete: "))
                 services.delete_scooter(current_user, scooter_id)
             except ValueError:
                 print("Invalid ID.")
-        elif choice == '13':
+        elif choice == '8':
             key = input("Enter search key (brand, model, or serial number): ")
             results = services.search_scooters(current_user, key)
             display_results(results)
-
-        # User Actions
-        elif choice == '20':
+        elif choice == '9':
             user_data = prompt_for_new_user(current_user.role)
             if user_data:
                 services.add_new_user(current_user, **user_data)
-        elif choice == '21':
+        elif choice == '10':
             target_user = input("Enter username to reset password for: ")
             services.reset_user_password(current_user, target_user)
-
-        # System Actions
-        elif choice == '80':
+        elif choice == '11':
             handle_view_logs(current_user)
-        elif choice == '81':
+        elif choice == '12':
             services.create_backup(current_user)
-        elif choice == '82':
+        elif choice == '13':
             filename = input("Enter backup filename (e.g., backup_20250617_103000.zip): ")
             code = input("Enter one-time restore code (press Enter if not required): ")
             services.restore_from_backup(current_user, filename, code or None)
-        elif choice == '88':
+        elif choice == '14':
             handle_update_own_password(current_user)
-        elif choice == '99':
-            print("Logging out...")
-            services.secure_logger.log(current_user.username, "Logged out")
-            break
-        else:
-            print("Invalid choice. Please try again.")
-
-def show_super_admin_menu(current_user: models.User):
-    """Displays the menu for the Super Administrator."""
-    # This menu inherits System Admin's, but adds Super Admin specific functions
-    while True:
-        print_header(f"Super Admin Menu | Logged in as: {current_user.username}")
-        print("1. Add New Traveller - Register a new traveller with all required personal and contact details.")
-        print("2. Search for Traveller - Find travellers by any information (name, email, etc.).")
-        print("3. Update Traveller - Modify details of an existing traveller.")
-        print("4. Delete Traveller - Remove a traveller from the system.")
-
-        print("10. Add New Scooter - Register a new scooter with technical and location details.")
-        print("11. Update Scooter Details - Change information or status of a scooter.")
-        print("12. Delete Scooter - Remove a scooter from the fleet.")
-        print("13. Search for Scooter - Find scooters by brand, model, or serial number.")
-
-        print("20. Add New User (Service Engineer) - Create a new Service Engineer account.")
-        print("21. Reset User Password - Reset the password for an existing user.")
-
-        print("80. View System Logs - Display recent system logs and mark suspicious logs as read.")
-        print("81. Create Backup - Generate a backup of the system database.")
-        print("82. Restore From Backup - Restore the system from a backup file.")
-        print("88. Update My Password - Change your own account password.")
-        
-        print("\n--- Super Admin Specific ---")
-        print("30. Add New User (System Admin or Service Engineer) - Create a new System Admin or Service Engineer account.")
-        print("83. Generate Restore Code for System Admin - Generate a one-time restore code for a System Admin user.")
-
-        print("99. Logout - Log out of the system and return to the login screen.")
-        
-        choice = input("Enter your choice: ")
-        
-        # Super admin can do everything a system admin can
-        if choice in [str(i) for i in range(1, 5)] + [str(i) for i in range(10, 14)] + [str(i) for i in range(20, 22)] + ['80', '81', '82']:
-            # A bit of a hack to reuse the System Admin logic by temporarily creating a new menu instance
-            # In a real GUI/Web app, this would be handled by a proper routing/controller layer
-            temp_system_admin_handler(choice, current_user)
-        
-        # Super Admin Overrides / Specifics
-        elif choice == '30':
-             user_data = prompt_for_new_user(current_user.role)
-             if user_data:
-                 services.add_new_user(current_user, **user_data)
-        elif choice == '83':
-            target_user = input("Enter System Admin username to generate code for: ")
-            backup_file = input("Enter the exact backup filename the code is for: ")
-            services.generate_restore_code(current_user, target_user, backup_file)
-
-        elif choice == '99':
+        elif choice == '15':
             print("Logging out...")
             services.secure_logger.log(current_user.username, "Logged out")
             break
