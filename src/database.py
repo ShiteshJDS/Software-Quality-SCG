@@ -1,53 +1,10 @@
-# src/models.py
+# src/database.py
+# BLOB = storing as bytes
 
-from dataclasses import dataclass
 import sqlite3
 import config
 from encryption import EncryptionManager
 from auth import hash_password
-
-@dataclass
-class User:
-    id: int
-    username: str # This will hold the DECRYPTED username for in-memory use
-    role: str
-    first_name: str
-    last_name: str
-    registration_date: str
-
-@dataclass
-class Traveller:
-    id: int
-    first_name: str
-    last_name: str
-    birthday: str
-    gender: str
-    street_name: str
-    house_number: str
-    zip_code: str
-    city: str
-    email: str
-    mobile_phone: str
-    driving_license_number: str
-    registration_date: str
-
-@dataclass
-class Scooter:
-    id: int
-    serial_number: str
-    brand: str
-    model: str
-    in_service_date: str
-    top_speed: float
-    battery_capacity: float
-    state_of_charge: float
-    target_range_soc_min: float
-    target_range_soc_max: float
-    location_lat: float
-    location_lon: float
-    out_of_service_status: int # 0 = In Service, 1 = Out of Service
-    mileage: float
-    last_maintenance_date: str
 
 def get_db_connection():
     """Establishes and returns a connection to the SQLite database."""
@@ -70,43 +27,50 @@ def initialize_database():
         username BLOB UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
         role TEXT NOT NULL,
-        first_name TEXT,
-        last_name TEXT,
+        first_name BLOB NOT NULL,
+        last_name BLOB NOT NULL,
         registration_date TEXT NOT NULL
     )
     """)
 
     # Insert hardcoded super administrator if not exists
-    encryption_manager = EncryptionManager(config.ENCRYPTION_KEY_FILE)
-    encrypted_username = encryption_manager.encrypt('super_admin')
-    hashed_password = hash_password('Admin_123?')
-    cursor.execute("""
-    INSERT OR IGNORE INTO users (username, password_hash, role, first_name, last_name, registration_date)
-    VALUES (?, ?, ?, ?, ?, ?)
-    """, (
-        encrypted_username,
-        hashed_password,
-        config.ROLE_SUPER_ADMIN,  # Use the correct role string
-        'Super',
-        'Admin',
-        '2025-06-17'
-    ))
+    try:
+        encryption_manager = EncryptionManager(config.ENCRYPTION_KEY_FILE)
+        encrypted_username = encryption_manager.encrypt('super_admin')
+        encrypted_first_name = encryption_manager.encrypt('Super')
+        encrypted_last_name = encryption_manager.encrypt('Admin')
+        hashed_password = hash_password('Admin_123?')
+        
+        cursor.execute("""
+        INSERT OR IGNORE INTO users (username, password_hash, role, first_name, last_name, registration_date)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            encrypted_username,
+            hashed_password,
+            config.ROLE_SUPER_ADMIN,
+            encrypted_first_name,
+            encrypted_last_name,
+            '2025-06-17'
+        ))
+    except Exception as e:
+        print(f"Error during super_admin initialization: {e}")
+
 
     # --- Create travellers table ---
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS travellers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        first_name TEXT NOT NULL,
-        last_name TEXT NOT NULL,
-        birthday TEXT NOT NULL,
-        gender TEXT,
-        street_name TEXT NOT NULL,
-        house_number TEXT NOT NULL,
-        zip_code TEXT NOT NULL,
-        city TEXT NOT NULL,
-        email TEXT NOT NULL,
-        mobile_phone TEXT NOT NULL,
-        driving_license_number TEXT NOT NULL,
+        first_name BLOB NOT NULL,
+        last_name BLOB NOT NULL,
+        birthday BLOB NOT NULL,
+        gender BLOB,
+        street_name BLOB NOT NULL,
+        house_number BLOB NOT NULL,
+        zip_code BLOB NOT NULL,
+        city BLOB NOT NULL,
+        email BLOB NOT NULL,
+        mobile_phone BLOB NOT NULL,
+        driving_license_number BLOB NOT NULL,
         registration_date TEXT NOT NULL
     )
     """)
@@ -126,22 +90,23 @@ def initialize_database():
         target_range_soc_max REAL,
         location_lat REAL,
         location_lon REAL,
-        out_of_service_status INTEGER DEFAULT 0, -- 0 = In Service, 1 = Out of Service
+        out_of_service_status INTEGER DEFAULT 0,
         mileage REAL,
         last_maintenance_date TEXT
     )
     """)
     
     # --- Create logs table ---
+    # CORRECTED: Changed encrypted columns from TEXT to BLOB
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT NOT NULL,
         time TEXT NOT NULL,
-        username TEXT NOT NULL,
-        description_of_activity TEXT NOT NULL,
-        additional_information TEXT,
-        suspicious TEXT NOT NULL
+        username BLOB NOT NULL,
+        description_of_activity BLOB NOT NULL,
+        additional_information BLOB,
+        suspicious INTEGER NOT NULL
     )
     """)
 
