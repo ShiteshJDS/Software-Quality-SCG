@@ -14,15 +14,17 @@ class User:
 @dataclass
 class Traveller:
     id: int
-    customer_id: str
     first_name: str
     last_name: str
     birthday: str
     gender: str
-    address: str
+    street_name: str
+    house_number: str
+    zip_code: str
+    city: str
     email: str
-    phone_number: str
-    driving_license: str
+    mobile_phone: str
+    driving_license_number: str
     registration_date: str
 
 @dataclass
@@ -32,3 +34,13 @@ class Scooter:
     brand: str
     model: str
     # Add all other scooter fields from the DB schema
+
+@dataclass
+class Log:
+    id: int
+    date: str
+    time: str
+    username: str
+    description_of_activity: str
+    additional_information: str
+    suspicious: str

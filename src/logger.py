@@ -12,37 +12,45 @@ class SecureLogger:
         """
         Creates a formatted log entry, encrypts it, and saves it to the database.
         """
-        timestamp = datetime.now().isoformat()
+        now = datetime.now()
+        date = now.strftime("%Y-%m-%d")
+        time = now.strftime("%H:%M:%S")
         
-        # Format the log entry as a structured string before encryption
-        log_entry_string = f"{timestamp}|{username}|{activity_desc}|{additional_info}|{is_suspicious}"
-        
-        # Encrypt the entire log string
-        encrypted_log_data = self.encryption_manager.encrypt(log_entry_string)
-        
+        # Encrypt sensitive log data
+        encrypted_username = self.encryption_manager.encrypt(username)
+        encrypted_activity_desc = self.encryption_manager.encrypt(activity_desc)
+        encrypted_additional_info = self.encryption_manager.encrypt(additional_info)
+
         # Store the encrypted blob in the database
         conn = database.get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO logs (timestamp, log_data, is_suspicious) VALUES (?, ?, ?)",
-            (timestamp, encrypted_log_data, 1 if is_suspicious else 0)
+            "INSERT INTO logs (date, time, username, description_of_activity, additional_information, suspicious) VALUES (?, ?, ?, ?, ?, ?)",
+            (date, time, encrypted_username, encrypted_activity_desc, encrypted_additional_info, 1 if is_suspicious else 0)
         )
         conn.commit()
         conn.close()
 
-    def get_logs(self, limit: int = 100) -> list[str]:
+    def get_logs(self, limit: int = 100) -> list[dict]:
         """
         Retrieves and decrypts the most recent log entries.
         """
         conn = database.get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT log_data FROM logs ORDER BY timestamp DESC LIMIT ?", (limit,))
+        cursor.execute("SELECT * FROM logs ORDER BY date DESC, time DESC LIMIT ?", (limit,))
         
         decrypted_logs = []
         rows = cursor.fetchall()
         for row in rows:
-            encrypted_data = row['log_data']
-            decrypted_log = self.encryption_manager.decrypt(encrypted_data)
+            decrypted_log = {
+                "id": row["id"],
+                "date": row["date"],
+                "time": row["time"],
+                "username": self.encryption_manager.decrypt(row["username"]),
+                "activity_description": self.encryption_manager.decrypt(row["activity_description"]),
+                "additional_info": self.encryption_manager.decrypt(row["additional_info"]),
+                "is_suspicious": "Yes" if row["is_suspicious"] == 1 else "No"
+            }
             decrypted_logs.append(decrypted_log)
             
         conn.close()

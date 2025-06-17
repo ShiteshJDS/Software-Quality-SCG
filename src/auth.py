@@ -23,26 +23,9 @@ def login() -> models.User | None:
     Returns a User object on success, None on failure.
     """
     username = input("Enter username: ").strip()
-    password = getpass.getpass("Enter password: ") # Hides password input
+    password = getpass.getpass("Enter password: (When entering the password it is hidden by getpass, you are still typing) ") # Hides password input
 
-    # --- Handle Super Administrator Login (Hard-coded) ---
-    if username == config.SUPER_ADMIN_USERNAME:
-        if password == config.SUPER_ADMIN_PASSWORD:
-            print("Super Administrator logged in successfully.")
-            # Create a mock User object for the super admin
-            return models.User(
-                id=0,
-                username=config.SUPER_ADMIN_USERNAME,
-                role=config.ROLE_SUPER_ADMIN,
-                first_name="Super",
-                last_name="Admin",
-                registration_date="N/A"
-            )
-        else:
-            print("Invalid credentials for Super Administrator.")
-            return None
-
-    # --- Handle Regular User Login (from Database) ---
+    # --- Handle User Login (from Database) ---
     # This process is necessarily slow as it requires decrypting all usernames.
     # This is a security tradeoff: protects usernames at rest but impacts login performance.
     all_users_from_db = services.get_all_users_raw() # Gets all raw user data

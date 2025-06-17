@@ -1,7 +1,53 @@
-# src/database.py
+# src/models.py
 
+from dataclasses import dataclass
 import sqlite3
 import config
+from encryption import EncryptionManager
+from auth import hash_password
+
+@dataclass
+class User:
+    id: int
+    username: str # This will hold the DECRYPTED username for in-memory use
+    role: str
+    first_name: str
+    last_name: str
+    registration_date: str
+
+@dataclass
+class Traveller:
+    id: int
+    first_name: str
+    last_name: str
+    birthday: str
+    gender: str
+    street_name: str
+    house_number: str
+    zip_code: str
+    city: str
+    email: str
+    mobile_phone: str
+    driving_license_number: str
+    registration_date: str
+
+@dataclass
+class Scooter:
+    id: int
+    serial_number: str
+    brand: str
+    model: str
+    in_service_date: str
+    top_speed: float
+    battery_capacity: float
+    state_of_charge: float
+    target_range_soc_min: float
+    target_range_soc_max: float
+    location_lat: float
+    location_lon: float
+    out_of_service_status: int # 0 = In Service, 1 = Out of Service
+    mileage: float
+    last_maintenance_date: str
 
 def get_db_connection():
     """Establishes and returns a connection to the SQLite database."""
@@ -18,11 +64,10 @@ def initialize_database():
     cursor = conn.cursor()
 
     # --- Create users table ---
-    # Usernames are encrypted, so they are stored as TEXT.
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
+        username BLOB UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
         role TEXT NOT NULL,
         first_name TEXT,
@@ -31,20 +76,37 @@ def initialize_database():
     )
     """)
 
+    # Insert hardcoded super administrator if not exists
+    encryption_manager = EncryptionManager(config.ENCRYPTION_KEY_FILE)
+    encrypted_username = encryption_manager.encrypt('super_admin')
+    hashed_password = hash_password('Admin_123?')
+    cursor.execute("""
+    INSERT OR IGNORE INTO users (username, password_hash, role, first_name, last_name, registration_date)
+    VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        encrypted_username,
+        hashed_password,
+        config.ROLE_SUPER_ADMIN,  # Use the correct role string
+        'Super',
+        'Admin',
+        '2025-06-17'
+    ))
+
     # --- Create travellers table ---
-    # All personally identifiable information (PII) is encrypted and stored as TEXT.
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS travellers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        customer_id TEXT UNIQUE NOT NULL,
         first_name TEXT NOT NULL,
         last_name TEXT NOT NULL,
         birthday TEXT NOT NULL,
         gender TEXT,
-        address TEXT NOT NULL,
+        street_name TEXT NOT NULL,
+        house_number TEXT NOT NULL,
+        zip_code TEXT NOT NULL,
+        city TEXT NOT NULL,
         email TEXT NOT NULL,
-        phone_number TEXT NOT NULL,
-        driving_license TEXT NOT NULL,
+        mobile_phone TEXT NOT NULL,
+        driving_license_number TEXT NOT NULL,
         registration_date TEXT NOT NULL
     )
     """)
@@ -71,13 +133,15 @@ def initialize_database():
     """)
     
     # --- Create logs table ---
-    # Log entries are fully encrypted and stored as a single BLOB.
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp TEXT NOT NULL,
-        log_data BLOB NOT NULL,
-        is_suspicious INTEGER DEFAULT 0
+        date TEXT NOT NULL,
+        time TEXT NOT NULL,
+        username TEXT NOT NULL,
+        description_of_activity TEXT NOT NULL,
+        additional_information TEXT,
+        suspicious TEXT NOT NULL
     )
     """)
 

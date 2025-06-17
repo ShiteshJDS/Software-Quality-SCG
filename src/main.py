@@ -97,8 +97,9 @@ def main():
             elif current_user.role == config.ROLE_SERVICE_ENGINEER:
                 show_service_engineer_menu(current_user)
             
-            # After the menu function returns (on logout), reset the user
+            # After the menu function returns (on logout), reset the user and exit loop
             current_user = None
+            break
 
 if __name__ == "__main__":
     try:
