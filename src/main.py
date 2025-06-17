@@ -239,6 +239,7 @@ def show_system_admin_menu(current_user: models.User):
         print("81. Create Backup - Generate a backup of the system database.")
         print("82. Restore From Backup - Restore the system from a backup file.")
         print("88. Update My Password - Change your own account password.")
+        print("99. Logout - Log out of the system and return to the login screen.")
         
         choice = input("Enter your choice: ")
         

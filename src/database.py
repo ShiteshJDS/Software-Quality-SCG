@@ -52,6 +52,40 @@ def initialize_database():
             encrypted_last_name,
             '2025-06-17'
         ))
+
+        # Insert dummy System Administrator
+        encrypted_username = encryption_manager.encrypt('sys_admin')
+        encrypted_first_name = encryption_manager.encrypt('System')
+        encrypted_last_name = encryption_manager.encrypt('Admin')
+        hashed_password = hash_password('SysAdmin_123?')
+        cursor.execute("""
+        INSERT OR IGNORE INTO users (username, password_hash, role, first_name, last_name, registration_date)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            encrypted_username,
+            hashed_password,
+            config.ROLE_SYSTEM_ADMIN,
+            encrypted_first_name,
+            encrypted_last_name,
+            '2025-06-17'
+        ))
+
+        # Insert dummy Service Engineer
+        encrypted_username = encryption_manager.encrypt('service_eng')
+        encrypted_first_name = encryption_manager.encrypt('Service')
+        encrypted_last_name = encryption_manager.encrypt('Engineer')
+        hashed_password = hash_password('ServiceEng_123?')
+        cursor.execute("""
+        INSERT OR IGNORE INTO users (username, password_hash, role, first_name, last_name, registration_date)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            encrypted_username,
+            hashed_password,
+            config.ROLE_SERVICE_ENGINEER,
+            encrypted_first_name,
+            encrypted_last_name,
+            '2025-06-17'
+        ))
     except Exception as e:
         print(f"Error during super_admin initialization: {e}")
 
