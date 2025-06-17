@@ -33,6 +33,18 @@ def requires_role(allowed_roles: list[str]):
 
 # --- User Services ---
 
+def _find_user_by_username(username: str) -> sqlite3.Row | None:
+    """Finds a user by their plaintext username by decrypting all usernames."""
+    all_users = get_all_users_raw()
+    for user_row in all_users:
+        try:
+            decrypted_username = encryption_manager.decrypt(user_row['username'])
+            if decrypted_username.lower() == username.lower():
+                return user_row
+        except Exception:
+            continue # Skip records that fail to decrypt
+    return None
+
 def get_all_users_raw() -> list[sqlite3.Row]:
     """Retrieves all user records from the database with encrypted data."""
     conn = database.get_db_connection()
@@ -154,12 +166,20 @@ def delete_user(current_user: models.User, target_username: str):
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def reset_user_password(current_user: models.User, target_username: str):
     """Resets a user's password to a new secure temporary password."""
+    target_user_record = _find_user_by_username(target_username)
+
+    if not target_user_record:
+        print(f"Error: User '{target_username}' not found.")
+        return False
+
+    # Now we have the correct encrypted username from the record
+    encrypted_target_username = target_user_record['username']
+    
     # Generate a secure temporary password
     alphabet = string.ascii_letters + string.digits + string.punctuation
     temp_password = ''.join(secrets.choice(alphabet) for i in range(14))
     
     new_password_hash = auth.hash_password(temp_password)
-    encrypted_target_username = encryption_manager.encrypt(target_username)
     
     conn = database.get_db_connection()
     cursor = conn.cursor()
@@ -168,11 +188,6 @@ def reset_user_password(current_user: models.User, target_username: str):
         (new_password_hash, encrypted_target_username)
     )
     
-    if cursor.rowcount == 0:
-        print(f"Error: User '{target_username}' not found.")
-        conn.close()
-        return False
-        
     conn.commit()
     conn.close()
     
