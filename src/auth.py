@@ -1,7 +1,7 @@
 # src/auth.py
 
 import bcrypt
-import getpass
+import getpass # Dit is een standaard-python library: zorgt ervoor dat de wachtwoord niet vertoont wordt tijdens het invullen
 import config, services, models
 
 def hash_password(password: str) -> str:
