@@ -38,14 +38,20 @@ def login() -> models.User | None:
             # Username match found, now verify the password
             if verify_password(password, user_row['password_hash']):
                 print(f"Welcome, {decrypted_username}!")
-                return models.User(
+                logged_in_user = models.User(
                     id=user_row['id'],
                     username=decrypted_username,
                     role=user_row['role'],
-                    first_name=user_row['first_name'],
-                    last_name=user_row['last_name'],
+                    first_name=services.encryption_manager.decrypt(user_row['first_name']),
+                    last_name=services.encryption_manager.decrypt(user_row['last_name']),
                     registration_date=user_row['registration_date']
                 )
+
+                # --- NEW: Check for unread suspicious logs for admins ---
+                if logged_in_user.role in [config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN]:
+                    services.check_for_unread_suspicious_logs()
+
+                return logged_in_user
             else:
                 # Password incorrect for this username
                 print("Invalid username or password.")

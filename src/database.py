@@ -98,6 +98,7 @@ def initialize_database():
     
     # --- Create logs table ---
     # CORRECTED: Changed encrypted columns from TEXT to BLOB
+    # ADDED: is_read column for suspicious log alerts
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,7 +107,21 @@ def initialize_database():
         username BLOB NOT NULL,
         description_of_activity BLOB NOT NULL,
         additional_information BLOB,
-        suspicious INTEGER NOT NULL
+        suspicious INTEGER NOT NULL,
+        is_read INTEGER DEFAULT 0 NOT NULL
+    )
+    """)
+
+    # --- Create restore_codes table ---
+    # NEW: Table for managing one-time backup restore codes
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS restore_codes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE NOT NULL,
+        backup_filename TEXT NOT NULL,
+        system_admin_username TEXT NOT NULL,
+        is_used INTEGER DEFAULT 0 NOT NULL,
+        generated_at TEXT NOT NULL
     )
     """)
 
