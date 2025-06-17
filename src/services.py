@@ -1,9 +1,9 @@
 # src/services.py
 
 import sqlite3
-from src import database, config, models, auth
-from src.encryption import EncryptionManager
-from src.logger import SecureLogger
+import database, config, models, auth
+from encryption import EncryptionManager
+from logger import SecureLogger
 
 # --- Initialize Global Managers ---
 # These are instantiated once and used by the services layer.

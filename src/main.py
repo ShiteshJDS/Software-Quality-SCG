@@ -1,6 +1,6 @@
 # src/main.py
 
-from src import database, auth, config, services, models
+import database, auth, config, services, models
 
 def print_header(title: str):
     """Prints a formatted header."""

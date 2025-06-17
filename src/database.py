@@ -1,7 +1,7 @@
 # src/database.py
 
 import sqlite3
-from src import config
+import config
 
 def get_db_connection():
     """Establishes and returns a connection to the SQLite database."""

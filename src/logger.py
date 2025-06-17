@@ -1,8 +1,8 @@
 # src/logger.py
 
 from datetime import datetime
-from src import database, config
-from src.encryption import EncryptionManager
+import database, config
+from encryption import EncryptionManager
 
 class SecureLogger:
     def __init__(self, encryption_manager: EncryptionManager):

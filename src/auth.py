@@ -2,7 +2,7 @@
 
 import bcrypt
 import getpass
-from src import config, services, models
+import config, services, models
 
 def hash_password(password: str) -> str:
     """Hashes a password using bcrypt."""
