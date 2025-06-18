@@ -399,7 +399,8 @@ def show_super_admin_menu(current_user: models.User):
         print("13. Create Backup - Generate a backup of the system database.")
         print("14. Restore From Backup - Restore the system from a backup file.")
         print("15. Generate Restore Code for System Admin - Generate a one-time restore code for a System Admin user.")
-        print("16. Logout - Log out of the system and return to the login screen.")
+        print("16. Revoke Restore Code for System Admin - Revoke an active, unused restore code.")
+        print("17. Logout - Log out of the system and return to the login screen.")
 
         choice = input("Enter your choice: ")
         # Map new numbers to old logic
@@ -470,6 +471,10 @@ def show_super_admin_menu(current_user: models.User):
             backup_file = input("Enter the exact backup filename the code is for: ")
             services.generate_restore_code(current_user, target_user, backup_file)
         elif choice == '16':
+            code_to_revoke = input("Enter the exact restore code to revoke: ")
+            if code_to_revoke:
+                services.revoke_restore_code(current_user, code_to_revoke)
+        elif choice == '17':
             print("Logging out...")
             services.secure_logger.log(current_user.username, "Logged out")
             break
