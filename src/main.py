@@ -399,6 +399,7 @@ def show_super_admin_menu(current_user: models.User):
         print("13. Create Backup - Generate a backup of the system database.")
         print("14. Restore From Backup - Restore the system from a backup file.")
         print("15. Generate Restore Code for System Admin - Generate a one-time restore code for a System Admin user.")
+        print("17. Revoke Restore Code - Revoke an active, unused restore code for a System Admin.")
         print("16. Logout - Log out of the system and return to the login screen.")
 
         choice = input("Enter your choice: ")
@@ -466,10 +467,12 @@ def show_super_admin_menu(current_user: models.User):
             code = input("Enter one-time restore code (press Enter if not required): ")
             services.restore_from_backup(current_user, filename, code or None)
         elif choice == '15':
-            print_user_syntax_rules()
             target_user = input("Enter System Admin username to generate code for: ")
             backup_file = input("Enter the exact backup filename the code is for: ")
             services.generate_restore_code(current_user, target_user, backup_file)
+        elif choice == '17':
+            code = input("Enter the restore code to revoke: ")
+            services.revoke_restore_code(current_user, code)
         elif choice == '16':
             print("Logging out...")
             services.secure_logger.log(current_user.username, "Logged out")

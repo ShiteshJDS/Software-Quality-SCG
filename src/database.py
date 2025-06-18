@@ -151,9 +151,9 @@ def initialize_database():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS restore_codes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        code TEXT UNIQUE NOT NULL,
-        backup_filename TEXT NOT NULL,
-        system_admin_username TEXT NOT NULL,
+        code BLOB UNIQUE NOT NULL,
+        backup_filename BLOB NOT NULL,
+        system_admin_username BLOB NOT NULL,
         is_used INTEGER DEFAULT 0 NOT NULL,
         generated_at TEXT NOT NULL
     )

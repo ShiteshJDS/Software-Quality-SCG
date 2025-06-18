@@ -714,27 +714,26 @@ def create_backup(current_user: models.User):
 @requires_role([config.ROLE_SUPER_ADMIN])
 def generate_restore_code(current_user: models.User, target_system_admin_username: str, backup_filename: str):
     """Generates a one-time restore code for a System Administrator."""
-    # Verify target user is a System Admin
-    # ... (omitted for brevity)
-
-    code = secrets.token_hex(16)
+    # Encrypt fields
+    encrypted_code = encryption_manager.encrypt(secrets.token_hex(16))
+    encrypted_backup_filename = encryption_manager.encrypt(backup_filename)
+    encrypted_target_username = encryption_manager.encrypt(target_system_admin_username)
     conn = database.get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
         "INSERT INTO restore_codes (code, backup_filename, system_admin_username, generated_at) VALUES (?, ?, ?, ?)",
-        (code, backup_filename, target_system_admin_username, datetime.now().isoformat())
+        (encrypted_code, encrypted_backup_filename, encrypted_target_username, datetime.now().isoformat())
     )
     conn.commit()
     conn.close()
-    
     secure_logger.log(current_user.username, "Generated restore code", f"For user {target_system_admin_username}, file {backup_filename}")
     print("\n--- Restore Code Generated ---")
-    print(f"Code: {code}")
+    print(f"Code: {encryption_manager.decrypt(encrypted_code)}")
     print(f"Valid for user: {target_system_admin_username}")
     print(f"Valid for file: {backup_filename}")
     print("This is a one-time use code.")
     print("----------------------------\n")
-    return code
+    return encryption_manager.decrypt(encrypted_code)
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def restore_from_backup(current_user: models.User, backup_filename: str, restore_code: str = None):
@@ -743,32 +742,28 @@ def restore_from_backup(current_user: models.User, backup_filename: str, restore
     if not os.path.exists(backup_filepath):
         print("Error: Backup file not found.")
         return False
-
-    # System Admin restore logic
     if current_user.role == config.ROLE_SYSTEM_ADMIN:
         if not restore_code:
             print("Error: A restore code is required for System Administrators.")
             return False
-            
         conn = database.get_db_connection()
         cursor = conn.cursor()
+        encrypted_code = encryption_manager.encrypt(restore_code)
+        encrypted_username = encryption_manager.encrypt(current_user.username)
+        encrypted_backup_filename = encryption_manager.encrypt(backup_filename)
         cursor.execute(
             "SELECT * FROM restore_codes WHERE code = ? AND system_admin_username = ? AND backup_filename = ? AND is_used = 0",
-            (restore_code, current_user.username, backup_filename)
+            (encrypted_code, encrypted_username, encrypted_backup_filename)
         )
         code_data = cursor.fetchone()
-        
         if not code_data:
             print("Error: Invalid, expired, or incorrect restore code for this backup/user.")
             secure_logger.log(current_user.username, "Failed backup restore", f"Invalid code used for {backup_filename}", is_suspicious=True)
             conn.close()
             return False
-            
-        # Invalidate the code
         cursor.execute("UPDATE restore_codes SET is_used = 1 WHERE id = ?", (code_data['id'],))
         conn.commit()
         conn.close()
-
     # Super Admin or validated System Admin can proceed
     try:
         with zipfile.ZipFile(backup_filepath, 'r') as zf:
@@ -783,6 +778,27 @@ def restore_from_backup(current_user: models.User, backup_filename: str, restore
     except Exception as e:
         print(f"An error occurred during restore: {e}")
         return False
+
+@requires_role([config.ROLE_SUPER_ADMIN])
+def revoke_restore_code(current_user: models.User, code: str):
+    """Revokes (deletes) an active, unused restore code."""
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    encrypted_code = encryption_manager.encrypt(code)
+    cursor.execute(
+        "DELETE FROM restore_codes WHERE code = ? AND is_used = 0",
+        (encrypted_code,)
+    )
+    if cursor.rowcount > 0:
+        conn.commit()
+        secure_logger.log(current_user.username, "Revoked restore code", f"Code: {code}")
+        print(f"Restore code '{code}' has been revoked.")
+        result = True
+    else:
+        print(f"No active, unused restore code found for '{code}'.")
+        result = False
+    conn.close()
+    return result
 
 # --- Log Services ---
 def check_for_unread_suspicious_logs():
