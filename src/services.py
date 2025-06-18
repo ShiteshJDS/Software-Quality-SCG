@@ -203,11 +203,10 @@ def update_own_password(current_user: models.User, old_password: str, new_passwo
         print("New password does not meet the security requirements.")
         return False
 
-    encrypted_username = encryption_manager.encrypt(current_user.username)
-    
     conn = database.get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT password_hash FROM users WHERE username = ?", (encrypted_username,))
+    # Use the user's ID for a reliable lookup.
+    cursor.execute("SELECT password_hash FROM users WHERE id = ?", (current_user.id,))
     user_row = cursor.fetchone()
 
     if not user_row or not auth.verify_password(old_password, user_row['password_hash']):
@@ -217,9 +216,10 @@ def update_own_password(current_user: models.User, old_password: str, new_passwo
         return False
         
     new_password_hash = auth.hash_password(new_password)
+    # Update the password using the user's ID.
     cursor.execute(
-        "UPDATE users SET password_hash = ? WHERE username = ?",
-        (new_password_hash, encrypted_username)
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (new_password_hash, current_user.id)
     )
     conn.commit()
     conn.close()
