@@ -737,6 +737,54 @@ def generate_restore_code(current_user: models.User, target_system_admin_usernam
     print("----------------------------\n")
     return code
 
+@requires_role([config.ROLE_SUPER_ADMIN])
+def revoke_restore_code(current_user: models.User, code_to_revoke: str):
+    """
+    Revokes an active, unused restore code by marking it as used.
+    This action is permanent and prevents the code from being used for a restore.
+    """
+    try:
+        conn = database.get_db_connection()
+        cursor = conn.cursor()
+
+        # Find the code by decrypting all active (is_used = 0) codes
+        cursor.execute("SELECT id, code FROM restore_codes WHERE is_used = 0")
+        all_active_codes = cursor.fetchall()
+
+        code_id_to_revoke = None
+        for row in all_active_codes:
+            try:
+                decrypted_code = encryption_manager.decrypt(row['code'])
+                if decrypted_code == code_to_revoke:
+                    code_id_to_revoke = row['id']
+                    break
+            except Exception:
+                # Ignore codes that fail to decrypt
+                continue
+
+        if code_id_to_revoke is None:
+            print("Error: Active restore code not found or it has already been used/revoked.")
+            return False
+
+        # Mark the code as 'used' to effectively revoke it
+        cursor.execute("UPDATE restore_codes SET is_used = 1 WHERE id = ?", (code_id_to_revoke,))
+        conn.commit()
+
+        if cursor.rowcount > 0:
+            secure_logger.log(current_user.username, "Revoked restore code", f"Code ID: {code_id_to_revoke}", is_suspicious=True)
+            print("Restore code has been successfully revoked.")
+            return True
+        else:
+            # This case should ideally not be hit if the ID was found
+            print("Error: Failed to revoke the code in the database.")
+            return False
+    except Exception as e:
+        print(f"An error occurred while revoking the code: {e}")
+        return False
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
+
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def restore_from_backup(current_user: models.User, backup_filename: str, restore_code: str = None):
     """Restores the database from a backup zip file."""
