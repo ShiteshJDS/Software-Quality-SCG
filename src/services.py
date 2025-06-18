@@ -352,22 +352,51 @@ def delete_scooter(current_user: models.User, serial_number: str):
             conn.close()
 
 
-# --- Traveller Services ---
+# ---  Services ---
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def add_traveller(current_user: models.User, first_name, last_name, birthday, 
                    gender, street_name, house_number, zip_code, city, email, 
                    mobile_phone, driving_license_number):
     """Adds a new traveller to the database after validation and encryption."""
-    # 1. Validate all traveller_data fields (example for a few)
+    # Predefined city list
+    allowed_cities = [
+        "Amsterdam", "Rotterdam", "Utrecht", "Eindhoven", "Groningen",
+        "Maastricht", "Haarlem", "Leiden", "Nijmegen", "Zwolle"
+    ]
+    # Validate all fields
+    if not validation.is_valid_first_name(first_name):
+        print("Invalid First Name. Only letters, 2-30 characters.")
+        return False
+    if not validation.is_valid_last_name(last_name):
+        print("Invalid Last Name. Only letters, 2-30 characters.")
+        return False
+    if not validation.is_valid_iso_date(birthday):
+        print("Invalid Birthday. Format must be YYYY-MM-DD.")
+        return False
+    if not validation.is_valid_gender(gender):
+        print("Invalid Gender. Must be 'male' or 'female'.")
+        return False
+    if not validation.is_valid_street_name(street_name):
+        print("Invalid Street Name. Letters and spaces, 2-50 characters.")
+        return False
+    if not validation.is_valid_house_number(house_number):
+        print("Invalid House Number. 1-6 digits.")
+        return False
     if not validation.is_valid_zip_code(zip_code):
-        print("Invalid Zip Code format.")
+        print("Invalid Zip Code format. DDDDXX (e.g., 1234AB).")
+        return False
+    if city not in allowed_cities:
+        print(f"Invalid City. Must be one of: {', '.join(allowed_cities)}")
+        return False
+    if not validation.is_valid_email(email):
+        print("Invalid Email Address format.")
         return False
     if not validation.is_valid_phone_digits(mobile_phone):
-        print("Invalid mobile phone format.")
+        print("Invalid Mobile Phone. 8 digits required.")
         return False
     if not validation.is_valid_driving_license(driving_license_number):
-        print("Invalid driving license format.")
+        print("Invalid Driving License Number. XXDDDDDDD or XDDDDDDDD.")
         return False
 
     try:
@@ -445,8 +474,45 @@ def search_travellers(current_user: models.User, search_key: str):
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def update_traveller(current_user: models.User, traveller_id: int, new_data: dict):
     """Updates an existing traveller's information."""
-    # Add validation for new_data here if necessary
-    
+    allowed_cities = [
+        "Amsterdam", "Rotterdam", "Utrecht", "Eindhoven", "Groningen",
+        "Maastricht", "Haarlem", "Leiden", "Nijmegen", "Zwolle"
+    ]
+    # Validate fields if present in update
+    if 'first_name' in new_data and not validation.is_valid_first_name(new_data['first_name']):
+        print("Invalid First Name. Only letters, 2-30 characters.")
+        return False
+    if 'last_name' in new_data and not validation.is_valid_last_name(new_data['last_name']):
+        print("Invalid Last Name. Only letters, 2-30 characters.")
+        return False
+    if 'birthday' in new_data and not validation.is_valid_iso_date(new_data['birthday']):
+        print("Invalid Birthday. Format must be YYYY-MM-DD.")
+        return False
+    if 'gender' in new_data and not validation.is_valid_gender(new_data['gender']):
+        print("Invalid Gender. Must be 'male' or 'female'.")
+        return False
+    if 'street_name' in new_data and not validation.is_valid_street_name(new_data['street_name']):
+        print("Invalid Street Name. Letters and spaces, 2-50 characters.")
+        return False
+    if 'house_number' in new_data and not validation.is_valid_house_number(new_data['house_number']):
+        print("Invalid House Number. 1-6 digits.")
+        return False
+    if 'zip_code' in new_data and not validation.is_valid_zip_code(new_data['zip_code']):
+        print("Invalid Zip Code format. DDDDXX (e.g., 1234AB).")
+        return False
+    if 'city' in new_data and new_data['city'] not in allowed_cities:
+        print(f"Invalid City. Must be one of: {', '.join(allowed_cities)}")
+        return False
+    if 'email' in new_data and not validation.is_valid_email(new_data['email']):
+        print("Invalid Email Address format.")
+        return False
+    if 'mobile_phone' in new_data and not validation.is_valid_phone_digits(new_data['mobile_phone']):
+        print("Invalid Mobile Phone. 8 digits required.")
+        return False
+    if 'driving_license_number' in new_data and not validation.is_valid_driving_license(new_data['driving_license_number']):
+        print("Invalid Driving License Number. XXDDDDDDD or XDDDDDDDD.")
+        return False
+
     encrypted_data = {key: encryption_manager.encrypt(str(value)) for key, value in new_data.items()}
     
     conn = database.get_db_connection()

@@ -71,22 +71,37 @@ def prompt_for_new_user(creator_role):
         "first_name": first_name, "last_name": last_name
     }
 
+def print_traveller_syntax_rules():
+    print("""
+Traveller Data Attribute Syntax Rules:
+- First Name: Only letters, 2-30 characters.
+- Last Name: Only letters, 2-30 characters.
+- Birthday: Format YYYY-MM-DD (e.g., 1990-12-31).
+- Gender: 'male' or 'female'.
+- Street Name: Letters and spaces, 2-50 characters.
+- House Number: 1-6 digits.
+- Zip Code: DDDDXX (e.g., 1234AB).
+- City: Must be one of the predefined list.
+- Email Address: Standard email format (e.g., user@example.com).
+- Mobile Phone: 8 digits (e.g., 12345678, will be stored as +31-6-12345678).
+- Driving License Number: XXDDDDDDD or XDDDDDDDD (e.g., AB1234567 or A12345678).
+""")
+
 def prompt_for_new_traveller():
     """Gets data for a new traveller from the console."""
     print_header("Add New Traveller")
+    print_traveller_syntax_rules()
     data = {}
     data['first_name'] = input("Enter first name: ")
     data['last_name'] = input("Enter last name: ")
     data['birthday'] = input("Enter birthday (YYYY-MM-DD): ")
-    data['gender'] = input("Enter gender: ")
+    data['gender'] = input("Enter gender: (Male / Female)")
     data['street_name'] = input("Enter street name: ")
     data['house_number'] = input("Enter house number: ")
     data['zip_code'] = input("Enter zip code (e.g., 1234AB): ").upper()
-    
     print("--- Predefined Cities ---")
     for i, city in enumerate(config.PREDEFINED_CITIES, 1):
         print(f"{i}. {city}")
-    
     try:
         city_choice = int(input("Choose a city (number): "))
         if 1 <= city_choice <= len(config.PREDEFINED_CITIES):
@@ -97,7 +112,6 @@ def prompt_for_new_traveller():
     except ValueError:
         print("Invalid input. Please enter a number.")
         return None
-
     data['email'] = input("Enter email address: ")
     data['mobile_phone'] = input("Enter 8-digit mobile number (e.g., 12345678): ")
     data['driving_license_number'] = input("Enter driving license (e.g., AB1234567): ").upper()
