@@ -15,6 +15,10 @@ ROLE_SUPER_ADMIN = 'Super Administrator'
 ROLE_SYSTEM_ADMIN = 'System Administrator'
 ROLE_SERVICE_ENGINEER = 'Service Engineer'
 
+# --- Brute-Force Protection ---
+MAX_LOGIN_ATTEMPTS = 3
+LOCKOUT_TIME_SECONDS = 60
+
 # --- Predefined Cities for Traveller Registration ---
 PREDEFINED_CITIES = [
     "Rotterdam",
