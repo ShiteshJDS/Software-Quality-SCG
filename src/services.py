@@ -368,6 +368,9 @@ def add_new_scooter(current_user: models.User, scooter_data: dict):
         return False
         
     try:
+        # Encrypt all PII and sensitive fields before insertion
+        encrypted_data = {key: encryption_manager.encrypt(str(value)) for key, value in scooter_data.items()}
+
         conn = database.get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
@@ -377,11 +380,13 @@ def add_new_scooter(current_user: models.User, scooter_data: dict):
                 location_lon, out_of_service_status, mileage, last_maintenance_date
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            scooter_data['serial_number'], scooter_data['brand'], scooter_data['model'],
-            datetime.now().strftime("%Y-%m-%d"), scooter_data.get('top_speed'), scooter_data.get('battery_capacity'),
-            scooter_data.get('state_of_charge'), scooter_data.get('target_range_soc_min'), scooter_data.get('target_range_soc_max'),
-            scooter_data.get('location_lat'), scooter_data.get('location_lon'), scooter_data.get('out_of_service_status', 0),
-            scooter_data.get('mileage'), scooter_data.get('last_maintenance_date')
+            encrypted_data['serial_number'], encrypted_data['brand'], encrypted_data['model'],
+            datetime.now().strftime("%Y-%m-%d"), encrypted_data.get('top_speed'), 
+            encrypted_data.get('battery_capacity'), encrypted_data.get('state_of_charge'), 
+            encrypted_data.get('target_range_soc_min'), encrypted_data.get('target_range_soc_max'),
+            encrypted_data.get('location_lat'), encrypted_data.get('location_lon'), 
+            encrypted_data.get('out_of_service_status', encryption_manager.encrypt('0')), 
+            encrypted_data.get('mileage'), encrypted_data.get('last_maintenance_date')
         ))
         conn.commit()
         secure_logger.log(current_user.username, "Added new scooter", f"Serial: {scooter_data['serial_number']}")
@@ -416,11 +421,14 @@ def update_scooter(current_user: models.User, scooter_id: int, new_data: dict):
             secure_logger.log(current_user.username, "Authorization failed", f"Attempted to edit disallowed scooter fields: {', '.join(disallowed_fields)}", is_suspicious=True)
             return False
 
+    # Encrypt the new data before updating
+    encrypted_data = {key: encryption_manager.encrypt(str(value)) for key, value in new_data.items()}
+
     conn = database.get_db_connection()
     cursor = conn.cursor()
     
-    set_clause = ", ".join([f"{key} = ?" for key in new_data.keys()])
-    params = list(new_data.values())
+    set_clause = ", ".join([f"{key} = ?" for key in encrypted_data.keys()])
+    params = list(encrypted_data.values())
     params.append(scooter_id)
     
     query = f"UPDATE scooters SET {set_clause} WHERE id = ?"
@@ -459,19 +467,40 @@ def delete_scooter(current_user: models.User, scooter_id: int):
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN, config.ROLE_SERVICE_ENGINEER])
 def search_scooters(current_user: models.User, search_key: str):
-    """Searches for scooters by a partial key in non-location fields."""
+    """
+    Searches for scooters by a partial key.
+    NOTE: This is computationally expensive as it decrypts all records in memory.
+    """
     conn = database.get_db_connection()
     cursor = conn.cursor()
-    
-    # Using LIKE for non-encrypted, non-location text fields
-    search_pattern = f'%{search_key}%'
-    cursor.execute(
-        "SELECT * FROM scooters WHERE brand LIKE ? OR model LIKE ? OR serial_number LIKE ?",
-        (search_pattern, search_pattern, search_pattern)
-    )
-    
-    results = [dict(row) for row in cursor.fetchall()]
+    cursor.execute("SELECT * FROM scooters")
+    all_scooters = cursor.fetchall()
     conn.close()
+
+    results = []
+    search_key_lower = search_key.lower()
+    
+    searchable_fields = ['brand', 'model', 'serial_number']
+
+    for row in all_scooters:
+        # Decrypt all fields to make them searchable and readable
+        try:
+            decrypted_row = {key: (encryption_manager.decrypt(value) if isinstance(value, bytes) else value) for key, value in dict(row).items()}
+        except Exception:
+            # If decryption fails for a row, skip it or handle error
+            # For now, we just print a message and skip.
+            # print(f"Warning: Could not decrypt row {row['id']}, skipping.")
+            continue
+
+        match = False
+        for field in searchable_fields:
+            if field in decrypted_row and search_key_lower in str(decrypted_row[field]).lower():
+                match = True
+                break
+        
+        if match:
+            results.append(decrypted_row)
+            
     return results
 
 # --- Backup and Restore Services ---
