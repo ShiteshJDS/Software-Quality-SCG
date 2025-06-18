@@ -1,6 +1,7 @@
 # src/models.py
 
 from dataclasses import dataclass
+from datetime import datetime
 
 @dataclass
 class User:
@@ -33,7 +34,17 @@ class Scooter:
     serial_number: str
     brand: str
     model: str
-    # Add all other scooter fields from the DB schema
+    in_service_date: str
+    top_speed: int
+    battery_capacity: int
+    state_of_charge: int
+    target_range_soc_min: int
+    target_range_soc_max: int
+    location_lat: float
+    location_lon: float
+    out_of_service_status: bool
+    mileage: int
+    last_maintenance_date: str
 
 @dataclass
 class Log:

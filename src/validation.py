@@ -1,6 +1,7 @@
 # src/validation.py
 
 import re
+from datetime import datetime
 
 def is_valid_username(username: str) -> bool:
     """
@@ -54,3 +55,16 @@ def is_valid_scooter_serial(serial: str) -> bool:
     """Validates Scooter Serial Number: 10 to 17 alphanumeric characters."""
     pattern = r"^[a-zA-Z0-9]{10,17}$"
     return re.match(pattern, serial) is not None
+
+def is_valid_location_coordinate(coord: str) -> bool:
+    """Validates GPS coordinate format with 5 decimal places."""
+    pattern = r"^-?\d+\.\d{5}$"
+    return re.match(pattern, str(coord)) is not None
+
+def is_valid_iso_date(date_string: str) -> bool:
+    """Validates date format: YYYY-MM-DD."""
+    try:
+        datetime.strptime(date_string, '%Y-%m-%d')
+        return True
+    except ValueError:
+        return False
