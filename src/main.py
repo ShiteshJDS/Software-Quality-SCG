@@ -466,7 +466,6 @@ def show_super_admin_menu(current_user: models.User):
             code = input("Enter one-time restore code (press Enter if not required): ")
             services.restore_from_backup(current_user, filename, code or None)
         elif choice == '15':
-            print_user_syntax_rules()
             target_user = input("Enter System Admin username to generate code for: ")
             backup_file = input("Enter the exact backup filename the code is for: ")
             services.generate_restore_code(current_user, target_user, backup_file)
