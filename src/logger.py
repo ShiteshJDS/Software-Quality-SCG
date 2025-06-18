@@ -52,7 +52,7 @@ class SecureLogger:
                 "activity_description": self.encryption_manager.decrypt(row["description_of_activity"]),
                 "additional_info": self.encryption_manager.decrypt(row["additional_information"]),
                 "is_suspicious": "Yes" if row["suspicious"] == 1 else "No",
-                "is_read": "Yes" if row["is_read"] == 1 else "No"
+                "is_read": "Yes" if row["is_read"] == 1 else ""
             }
             decrypted_logs.append(decrypted_log)
             
