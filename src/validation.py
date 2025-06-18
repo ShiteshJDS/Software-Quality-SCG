@@ -3,6 +3,16 @@
 import re
 from datetime import datetime
 
+def _is_safe_string(s: str) -> bool:
+    """
+    Internal check for unsafe characters, starting with null bytes, to prevent injection attacks.
+    Returns False if the string is unsafe.
+    """
+    # Add other checks here in the future if needed.
+    if '\0' in str(s):
+        return False
+    return True
+
 def is_valid_username(username: str) -> bool:
     """
     Validates a username based on assignment rules.
@@ -10,6 +20,7 @@ def is_valid_username(username: str) -> bool:
     - Starts with a letter or underscore.
     - Can contain letters, numbers, underscores, apostrophes, and periods.
     """
+    if not _is_safe_string(username): return False
     pattern = r"^[a-zA-Z_][a-zA-Z0-9_'.]{7,9}$"
     return re.match(pattern, username) is not None
 
@@ -20,6 +31,7 @@ def is_valid_password(password: str) -> bool:
     - Must contain at least one lowercase letter, one uppercase letter,
       one digit, and one special character.
     """
+    if not _is_safe_string(password): return False
     if not 12 <= len(password) <= 30:
         return False
     
@@ -27,8 +39,8 @@ def is_valid_password(password: str) -> bool:
     patterns = [
         r"(?=.*[a-z])",        # At least one lowercase letter
         r"(?=.*[A-Z])",        # At least one uppercase letter
-        r"(?=.*\d)",           # At least one digit
-        r"(?=.*[~!@#$%^&*()_+=\`{}\[\]:;'<>,.?/|\\-])" # At least one special character
+        r"(?=.*\\d)",           # At least one digit
+        r"(?=.*[~!@#$%^&*()_+=\`{}\[\]:;'<>,.?/|\\\\-])" # At least one special character
     ]
     
     full_pattern = "".join(patterns) + r".{12,30}$"
@@ -36,34 +48,40 @@ def is_valid_password(password: str) -> bool:
 
 def is_valid_zip_code(zip_code: str) -> bool:
     """Validates Zip Code format: DDDDXX."""
-    pattern = r"^\d{4}[A-Z]{2}$"
+    if not _is_safe_string(zip_code): return False
+    pattern = r"^\\d{4}[A-Z]{2}$"
     return re.match(pattern, zip_code) is not None
 
 def is_valid_phone_digits(digits: str) -> bool:
     """Validates phone number digits: DDDDDDDD."""
-    pattern = r"^\d{8}$"
+    if not _is_safe_string(digits): return False
+    pattern = r"^\\d{8}$"
     return re.match(pattern, digits) is not None
 
 def is_valid_driving_license(license_num: str) -> bool:
     """Validates Driving License: XXDDDDDDD or XDDDDDDDD."""
+    if not _is_safe_string(license_num): return False
     # This pattern precisely matches a 9-character string that is
     # either 1 letter followed by 8 digits, or 2 letters followed by 7 digits.
-    pattern = r"^(?:[A-Z]{1}\d{8}|[A-Z]{2}\d{7})$"
+    pattern = r"^(?:[A-Z]{1}\\d{8}|[A-Z]{2}\\d{7})$"
     return re.match(pattern, license_num.upper()) is not None
 
 def is_valid_scooter_serial(serial: str) -> bool:
     """Validates Scooter Serial Number: 10 to 17 alphanumeric characters."""
+    if not _is_safe_string(serial): return False
     pattern = r"^[a-zA-Z0-9]{10,17}$"
     return re.match(pattern, serial) is not None
 
 def is_valid_location_coordinate(coord: str) -> bool:
     """Validates GPS coordinate format (a number with an optional sign and 5 decimal places)."""
+    if not _is_safe_string(coord): return False
     # This pattern ensures there are digits both before and after the decimal point.
-    pattern = r"^[+-]?\d+\.\d{5}$"
+    pattern = r"^[+-]?\\d+\\.\\d{5}$"
     return re.match(pattern, str(coord)) is not None
 
 def is_valid_iso_date(date_string: str) -> bool:
     """Validates date format: YYYY-MM-DD."""
+    if not _is_safe_string(date_string): return False
     try:
         datetime.strptime(date_string, '%Y-%m-%d')
         return True
@@ -72,25 +90,31 @@ def is_valid_iso_date(date_string: str) -> bool:
 
 def is_valid_first_name(name: str) -> bool:
     """Validates first name: only letters, 2-30 chars."""
+    if not _is_safe_string(name): return False
     return bool(re.match(r"^[A-Za-z]{2,30}$", name))
 
 def is_valid_last_name(name: str) -> bool:
     """Validates last name: only letters, 2-30 chars."""
+    if not _is_safe_string(name): return False
     return bool(re.match(r"^[A-Za-z]{2,30}$", name))
 
 def is_valid_email(email: str) -> bool:
     """Validates email address format."""
-    pattern = r"^[\w\.-]+@[\w\.-]+\.\w{2,}$"
+    if not _is_safe_string(email): return False
+    pattern = r"^[\\w\\.-]+@[\\w\\.-]+\\.\\w{2,}$"
     return re.match(pattern, email) is not None
 
 def is_valid_gender(gender: str) -> bool:
     """Validates gender: must be 'male' or 'female'."""
+    if not _is_safe_string(gender): return False
     return gender.lower() in ['male', 'female']
 
 def is_valid_house_number(house_number: str) -> bool:
     """Validates house number: 1-6 digits."""
-    return bool(re.match(r"^\d{1,6}$", str(house_number)))
+    if not _is_safe_string(house_number): return False
+    return bool(re.match(r"^\\d{1,6}$", str(house_number)))
 
 def is_valid_street_name(street: str) -> bool:
     """Validates street name: letters, spaces, 2-50 chars."""
+    if not _is_safe_string(street): return False
     return bool(re.match(r"^[A-Za-z ]{2,50}$", street))
