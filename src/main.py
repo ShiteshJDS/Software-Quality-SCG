@@ -198,7 +198,8 @@ Scooter Data Attribute Syntax Rules:
 - Battery Capacity: Number (e.g., 1000).
 - State of Charge (SoC): Percentage (0-100).
 - Target SoC Min/Max: Percentage (0-100).
-- Location (Lat/Lon): Real-world coordinates with at least 5 decimal places (e.g., 51.92250, 4.47917).
+- Location (Lat/Lon): Real-world coordinates with at least 5 decimal places (e.g., 51.92250, 4.47917) In rotterdam between 51.8, 52.0
+    MIN_LON, MAX_LON = 4.3, 4.6.
 - Out-of-service Status: 0 for In-Service, 1 for Out-of-Service.
 - Mileage: Number (e.g., 150.7).
 - Last Maintenance Date: Format YYYY-MM-DD (e.g., 2025-06-18).
@@ -231,16 +232,24 @@ def prompt_for_new_scooter():
         else:
             print("Max SoC cannot be less than Min SoC.")
 
-    data['location_lat'] = prompt_with_validation(
-        "Enter initial latitude (e.g., 51.92250): ",
-        validation.is_valid_location_coordinate,
-        "Must be a valid coordinate with at least 5 decimal places."
-    )
-    data['location_lon'] = prompt_with_validation(
-        "Enter initial longitude (e.g., 4.47917): ",
-        validation.is_valid_location_coordinate,
-        "Must be a valid coordinate with at least 5 decimal places."
-    )
+    while True:
+        location_lat = prompt_with_validation(
+            "Enter initial latitude (e.g., 51.92250): ",
+            validation.is_valid_location_coordinate,
+            "Must be a valid coordinate with at least 5 decimal places."
+        )
+        location_lon = prompt_with_validation(
+            "Enter initial longitude (e.g., 4.47917): ",
+            validation.is_valid_location_coordinate,
+            "Must be a valid coordinate with at least 5 decimal places."
+        )
+        if validation.is_in_rotterdam_region(float(location_lat), float(location_lon)):
+            data['location_lat'] = location_lat
+            data['location_lon'] = location_lon
+            break
+        else:
+            print("Location is outside of the Rotterdam region. Please enter coordinates within the valid range.")
+
     data['mileage'] = prompt_for_float("Enter initial mileage (km): ", min_val=0)
     data['last_maintenance_date'] = prompt_with_validation(
         "Enter last maintenance date (YYYY-MM-DD): ",
@@ -256,6 +265,11 @@ def prompt_for_scooter_update(current_user: models.User):
     scooter_id = prompt_for_int("Enter Scooter ID to update: ")
     if scooter_id is None:
         return None, None
+
+    # Fetch current scooter data to validate location updates
+    current_scooter = services.get_scooter_details(current_user, scooter_id)
+    if not current_scooter:
+        return None, None # Error already printed by service
 
     print("Enter new data. Press Enter to skip a field.")
     print_scooter_syntax_rules()
@@ -294,11 +308,28 @@ def prompt_for_scooter_update(current_user: models.User):
     max_soc = prompt_for_float(f"New target_range_soc_max: ", min_val=max_soc_min, max_val=100, optional=True)
     if max_soc is not None: update_data['target_range_soc_max'] = max_soc
 
-    lat = prompt_with_validation("New location_lat: ", validation.is_valid_location_coordinate, "Must be a valid coordinate.", optional=True)
-    if lat: update_data['location_lat'] = lat
+    # --- Location Update ---
+    # Loop until valid coordinates in the Rotterdam region are provided, or the user skips.
+    while True:
+        lat = prompt_with_validation("New location_lat (optional): ", validation.is_valid_location_coordinate, "Must be a valid coordinate.", optional=True)
+        lon = prompt_with_validation("New location_lon (optional): ", validation.is_valid_location_coordinate, "Must be a valid coordinate.", optional=True)
 
-    lon = prompt_with_validation("New location_lon: ", validation.is_valid_location_coordinate, "Must be a valid coordinate.", optional=True)
-    if lon: update_data['location_lon'] = lon
+        # If user provides neither, we break and move on.
+        if not lat and not lon:
+            break
+
+        # Determine the final coordinates for validation. Use existing if new is not provided.
+        final_lat = float(lat) if lat else float(current_scooter['location_lat'])
+        final_lon = float(lon) if lon else float(current_scooter['location_lon'])
+
+        if validation.is_in_rotterdam_region(final_lat, final_lon):
+            # If valid, add the provided values to the update dictionary.
+            if lat: update_data['location_lat'] = lat
+            if lon: update_data['location_lon'] = lon
+            break  # Exit the loop on success.
+        else:
+            print("Error: Location is outside of the Rotterdam region. Both latitude and longitude must be corrected or left blank.")
+            # Loop continues, prompting for both again.
 
     status = prompt_for_int("New out_of_service_status (0 or 1): ", min_val=0, max_val=1, optional=True)
     if status is not None: update_data['out_of_service_status'] = status
