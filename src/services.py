@@ -280,15 +280,15 @@ def update_own_password(current_user: models.User, old_password: str, new_passwo
 # --- Scooter Services ---
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
-def add_new_scooter(current_user: models.User, serial_number: str, brand: str, model: str, top_speed: int, battery_capacity: int, state_of_charge: int, target_range_soc_min: int, target_range_soc_max: int, location_lat: float, location_lon: float, mileage: int, last_maintenance_date: str, out_of_service_status: bool = False):
+def add_new_scooter(current_user: models.User, serial_number: str, brand: str, model: str, top_speed: int, battery_capacity: int, state_of_charge: int, target_range_soc_min: int, target_range_soc_max: int, location_lat: str, location_lon: str, mileage: int, last_maintenance_date: str, out_of_service_status: bool = False):
     """Adds a new scooter to the fleet."""
     if not validation.is_valid_scooter_serial(serial_number):
         print("Invalid scooter serial number format. Must be 10 to 17 alphanumeric characters.")
         return False
-    if not validation.is_valid_location_coordinate(str(location_lat)):
+    if not validation.is_valid_location_coordinate(location_lat):
         print("Invalid latitude format. Must have 5 decimal places (e.g., 51.92250).")
         return False
-    if not validation.is_valid_location_coordinate(str(location_lon)):
+    if not validation.is_valid_location_coordinate(location_lon):
         print("Invalid longitude format. Must have 5 decimal places (e.g., 4.47917).")
         return False
     if not validation.is_valid_iso_date(last_maintenance_date):
@@ -335,7 +335,7 @@ def update_scooter(current_user: models.User, scooter_id: int, updates: dict):
     for key, value in updates.items():
         if key in editable_fields:
             # Validate input before adding to allowed_updates
-            if key in ['location_lat', 'location_lon'] and not validation.is_valid_location_coordinate(str(value)):
+            if key in ['location_lat', 'location_lon'] and not validation.is_valid_location_coordinate(value):
                 print(f"Invalid format for {key}. Must have 5 decimal places.")
                 return False
             if key == 'last_maintenance_date' and not validation.is_valid_iso_date(value):

@@ -159,8 +159,8 @@ def prompt_for_new_scooter():
         data['state_of_charge'] = float(input("Enter initial State of Charge (%): "))
         data['target_range_soc_min'] = float(input("Enter Target SoC Min (%): "))
         data['target_range_soc_max'] = float(input("Enter Target SoC Max (%): "))
-        data['location_lat'] = float(input("Enter initial latitude (e.g., 51.9225): "))
-        data['location_lon'] = float(input("Enter initial longitude (e.g., 4.47917): "))
+        data['location_lat'] = input("Enter initial latitude (e.g., 51.9225): ")  # Changed to str
+        data['location_lon'] = input("Enter initial longitude (e.g., 4.47917): ")  # Changed to str
         data['mileage'] = float(input("Enter initial mileage (km): "))
         data['last_maintenance_date'] = input("Enter last maintenance date (YYYY-MM-DD): ")
         return data
@@ -189,8 +189,10 @@ def prompt_for_scooter_update(current_user: models.User):
             value = input(f"New {field.replace('_', ' ')}: ")
             if value:
                 # Basic type conversion
-                if field in ['top_speed', 'battery_capacity', 'state_of_charge', 'target_range_soc_min', 'target_range_soc_max', 'location_lat', 'location_lon', 'mileage']:
+                if field in ['top_speed', 'battery_capacity', 'state_of_charge', 'target_range_soc_min', 'target_range_soc_max', 'mileage']:
                     update_data[field] = float(value)
+                elif field in ['location_lat', 'location_lon']:
+                    update_data[field] = value  # Keep as string
                 elif field in ['out_of_service_status']:
                     update_data[field] = int(value)
                 else:

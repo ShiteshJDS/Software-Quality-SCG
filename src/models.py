@@ -40,8 +40,8 @@ class Scooter:
     state_of_charge: int
     target_range_soc_min: int
     target_range_soc_max: int
-    location_lat: float
-    location_lon: float
+    location_lat: str  # Changed to str
+    location_lon: str  # Changed to str
     out_of_service_status: bool
     mileage: int
     last_maintenance_date: str

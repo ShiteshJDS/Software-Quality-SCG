@@ -57,8 +57,9 @@ def is_valid_scooter_serial(serial: str) -> bool:
     return re.match(pattern, serial) is not None
 
 def is_valid_location_coordinate(coord: str) -> bool:
-    """Validates GPS coordinate format with 5 decimal places."""
-    pattern = r"^-?\d+\.\d{5}$"
+    """Validates GPS coordinate format (a number with an optional sign and 5 decimal places)."""
+    # This pattern ensures there are digits both before and after the decimal point.
+    pattern = r"^[+-]?\d+\.\d{5}$"
     return re.match(pattern, str(coord)) is not None
 
 def is_valid_iso_date(date_string: str) -> bool:

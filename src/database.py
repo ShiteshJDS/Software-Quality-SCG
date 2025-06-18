@@ -122,8 +122,8 @@ def initialize_database():
         state_of_charge REAL,
         target_range_soc_min REAL,
         target_range_soc_max REAL,
-        location_lat REAL,
-        location_lon REAL,
+        location_lat TEXT,
+        location_lon TEXT,
         out_of_service_status INTEGER DEFAULT 0,
         mileage REAL,
         last_maintenance_date TEXT
