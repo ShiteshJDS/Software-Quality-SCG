@@ -286,10 +286,13 @@ def add_new_scooter(current_user: models.User, serial_number: str, brand: str, m
         print("Invalid scooter serial number format. Must be 10 to 17 alphanumeric characters.")
         return False
     if not validation.is_valid_location_coordinate(location_lat):
-        print("Invalid latitude format. Must have 5 decimal places (e.g., 51.92250).")
+        print("Invalid latitude format. Must have at least 5 decimal places (e.g., 51.92250).")
         return False
     if not validation.is_valid_location_coordinate(location_lon):
-        print("Invalid longitude format. Must have 5 decimal places (e.g., 4.47917).")
+        print("Invalid longitude format. Must have at least 5 decimal places (e.g., 4.47917).")
+        return False
+    if not validation.is_in_rotterdam_region(float(location_lat), float(location_lon)):
+        print("Location is outside of the Rotterdam region.")
         return False
     if not validation.is_valid_iso_date(last_maintenance_date):
         print("Invalid date format. Must be YYYY-MM-DD.")
@@ -355,7 +358,7 @@ def update_scooter(current_user: models.User, scooter_id: int, updates: dict):
         if key in editable_fields:
             # Validate input before adding to allowed_updates
             if key in ['location_lat', 'location_lon'] and not validation.is_valid_location_coordinate(value):
-                print(f"Invalid format for {key}. Must have 5 decimal places.")
+                print(f"Invalid format for {key}. Must have at least 5 decimal places.")
                 return False
             if key == 'last_maintenance_date' and not validation.is_valid_iso_date(value):
                 print(f"Invalid date format for {key}. Must be YYYY-MM-DD.")
@@ -370,6 +373,35 @@ def update_scooter(current_user: models.User, scooter_id: int, updates: dict):
     if not allowed_updates:
         print("No valid fields to update or all updates were unauthorized.")
         return False
+
+    # New validation for location
+    if 'location_lat' in allowed_updates or 'location_lon' in allowed_updates:
+        conn = None
+        try:
+            conn = database.get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT location_lat, location_lon FROM scooters WHERE id = ?", (scooter_id,))
+            scooter_row = cursor.fetchone()
+
+            if not scooter_row:
+                print(f"Error: Scooter with ID '{scooter_id}' not found.")
+                return False
+
+            current_lat = float(encryption_manager.decrypt(scooter_row['location_lat']))
+            current_lon = float(encryption_manager.decrypt(scooter_row['location_lon']))
+
+            new_lat = float(allowed_updates.get('location_lat', current_lat))
+            new_lon = float(allowed_updates.get('location_lon', current_lon))
+
+            if not validation.is_in_rotterdam_region(new_lat, new_lon):
+                print("Location is outside of the Rotterdam region.")
+                return False
+        except Exception as e:
+            print(f"An error occurred during location validation: {e}")
+            return False
+        finally:
+            if conn:
+                conn.close()
 
     encrypted_updates = {key: encryption_manager.encrypt(str(value)) for key, value in allowed_updates.items()}
 

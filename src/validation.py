@@ -72,12 +72,31 @@ def is_valid_scooter_serial(serial: str) -> bool:
     pattern = r"^[a-zA-Z0-9]{10,17}$"
     return re.match(pattern, serial) is not None
 
+
 def is_valid_location_coordinate(coord: str) -> bool:
-    """Validates GPS coordinate format (a number with an optional sign and 5 decimal places)."""
+    """Validates GPS coordinate format (a number with an optional sign and at least 5 decimal places for 2-meter accuracy)."""
     if not _is_safe_string(coord): return False
-    # This pattern ensures there are digits both before and after the decimal point.
-    pattern = r"^[+-]?\\d+\\.\\d{5}$"
+    # This pattern ensures there are digits both before and after the decimal point,
+    # and at least 5 decimal places for accuracy.
+    pattern = r"^[+-]?\d+\.\d{5,}$"
     return re.match(pattern, str(coord)) is not None
+
+
+def is_in_rotterdam_region(latitude: float, longitude: float) -> bool:
+    """
+    Validates if the given GPS coordinates are within the Rotterdam region.
+    """
+    # Bounding box for the Rotterdam region.
+    # These are approximate values and can be adjusted for more precision.
+    MIN_LAT, MAX_LAT = 51.8, 52.0
+    MIN_LON, MAX_LON = 4.3, 4.6
+
+    if not (MIN_LAT <= latitude <= MAX_LAT):
+        return False
+    if not (MIN_LON <= longitude <= MAX_LON):
+        return False
+    return True
+
 
 def is_valid_iso_date(date_string: str) -> bool:
     """Validates date format: YYYY-MM-DD."""
