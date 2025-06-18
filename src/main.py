@@ -399,8 +399,8 @@ def show_super_admin_menu(current_user: models.User):
         print("13. Create Backup - Generate a backup of the system database.")
         print("14. Restore From Backup - Restore the system from a backup file.")
         print("15. Generate Restore Code for System Admin - Generate a one-time restore code for a System Admin user.")
-        print("17. Revoke Restore Code - Revoke an active, unused restore code for a System Admin.")
         print("16. Logout - Log out of the system and return to the login screen.")
+        print("17. Revoke Restore Code - Revoke an active, unused restore code for a System Admin.")
 
         choice = input("Enter your choice: ")
         # Map new numbers to old logic
