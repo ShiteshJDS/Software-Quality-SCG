@@ -297,7 +297,7 @@ def show_super_admin_menu(current_user: models.User):
         if choice == '1':
             traveller_data = prompt_for_new_traveller()
             if traveller_data:
-                services.add_new_traveller(current_user, traveller_data)
+                services.add_new_traveller(current_user, **traveller_data)
         elif choice == '2':
             print_traveller_syntax_rules()
             key = input("Enter search key (any traveller info): ")
@@ -320,7 +320,7 @@ def show_super_admin_menu(current_user: models.User):
         elif choice == '5':
             scooter_data = prompt_for_new_scooter()
             if scooter_data:
-                services.add_new_scooter(current_user, scooter_data)
+                services.add_new_scooter(current_user, **scooter_data)
         elif choice == '6':
             scooter_id, update_data = prompt_for_scooter_update(current_user)
             if scooter_id and update_data:
@@ -400,7 +400,7 @@ def show_system_admin_menu(current_user: models.User):
         if choice == '1':
             traveller_data = prompt_for_new_traveller()
             if traveller_data:
-                services.add_new_traveller(current_user, traveller_data)
+                services.add_new_traveller(current_user, **traveller_data)
         elif choice == '2':
             print_traveller_syntax_rules()
             key = input("Enter search key (any traveller info): ")
@@ -423,7 +423,7 @@ def show_system_admin_menu(current_user: models.User):
         elif choice == '5':
             scooter_data = prompt_for_new_scooter()
             if scooter_data:
-                services.add_new_scooter(current_user, scooter_data)
+                services.add_new_scooter(current_user, **scooter_data)
         elif choice == '6':
             scooter_id, update_data = prompt_for_scooter_update(current_user)
             if scooter_id and update_data:
@@ -472,7 +472,7 @@ def temp_system_admin_handler(choice, current_user):
     if choice == '1':
         traveller_data = prompt_for_new_traveller()
         if traveller_data:
-            services.add_new_traveller(current_user, traveller_data)
+            services.add_new_traveller(current_user, **traveller_data)
     elif choice == '2':
         print_traveller_syntax_rules()
         key = input("Enter search key (any traveller info): ")
@@ -496,7 +496,7 @@ def temp_system_admin_handler(choice, current_user):
     elif choice == '10':
         scooter_data = prompt_for_new_scooter()
         if scooter_data:
-            services.add_new_scooter(current_user, scooter_data)
+            services.add_new_scooter(current_user, **scooter_data)
     elif choice == '11':
         scooter_id, update_data = prompt_for_scooter_update(current_user)
         if scooter_id and update_data:

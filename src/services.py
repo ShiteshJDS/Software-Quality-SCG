@@ -110,58 +110,107 @@ def add_new_user(current_user: models.User, username, password, role, first_name
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def update_user_profile(current_user: models.User, target_username: str, new_profile_data: dict):
-    """Updates a user's first and last name."""
-    # Ensure only allowed roles can be updated by the current user
-    # Logic to prevent role escalation should be here
-    # For now, we only update first/last name
-    
-    conn = database.get_db_connection()
-    cursor = conn.cursor()
-    
-    encrypted_target_username = encryption_manager.encrypt(target_username)
-    encrypted_first_name = encryption_manager.encrypt(new_profile_data['first_name'])
-    encrypted_last_name = encryption_manager.encrypt(new_profile_data['last_name'])
-
-    cursor.execute(
-        "UPDATE users SET first_name = ?, last_name = ? WHERE username = ?",
-        (encrypted_first_name, encrypted_last_name, encrypted_target_username)
-    )
-    
-    if cursor.rowcount == 0:
+    """Updates a user's first and last name, enforcing role hierarchy."""
+    target_user_record = _find_user_by_username(target_username)
+    if not target_user_record:
         print(f"Error: User '{target_username}' not found.")
         return False
-        
-    conn.commit()
-    conn.close()
+
+    target_user_role = target_user_record['role']
+    encrypted_target_username = target_user_record['username']
+
+    # Role-based authorization check
+    if current_user.role == config.ROLE_SYSTEM_ADMIN and target_user_role != config.ROLE_SERVICE_ENGINEER:
+        print("System Admins can only update Service Engineer profiles.")
+        secure_logger.log(current_user.username, "Authorization failed", f"Attempted to update profile of {target_username} ({target_user_role})", is_suspicious=True)
+        return False
     
-    secure_logger.log(current_user.username, "Updated user profile", f"Target Username: {target_username}")
-    print("User profile updated successfully.")
-    return True
+    if not new_profile_data or not any(new_profile_data.values()):
+        print("No new data provided for update.")
+        return False
+
+    # Build the update query dynamically based on provided data
+    update_fields = {}
+    if new_profile_data.get('first_name'):
+        update_fields['first_name'] = encryption_manager.encrypt(new_profile_data['first_name'])
+    if new_profile_data.get('last_name'):
+        update_fields['last_name'] = encryption_manager.encrypt(new_profile_data['last_name'])
+
+    if not update_fields:
+        print("No valid fields to update.")
+        return False
+
+    set_clause = ", ".join([f"{key} = ?" for key in update_fields.keys()])
+    params = list(update_fields.values()) + [encrypted_target_username]
+
+    try:
+        conn = database.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            f"UPDATE users SET {set_clause} WHERE username = ?",
+            tuple(params)
+        )
+        
+        if cursor.rowcount == 0:
+            print(f"Error: User '{target_username}' not found during update.")
+            return False
+            
+        conn.commit()
+        secure_logger.log(current_user.username, "Updated user profile", f"Target Username: {target_username}")
+        print("User profile updated successfully.")
+        return True
+    except Exception as e:
+        print(f"An error occurred while updating user profile: {e}")
+        return False
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
+
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def delete_user(current_user: models.User, target_username: str):
-    """Deletes a user from the system."""
+    """Deletes a user from the system, enforcing role hierarchy."""
     if current_user.username.lower() == target_username.lower():
         print("Error: You cannot delete your own account this way.")
         return False
 
-    encrypted_target_username = encryption_manager.encrypt(target_username)
-
-    conn = database.get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM users WHERE username = ?", (encrypted_target_username,))
-    
-    if cursor.rowcount == 0:
+    target_user_record = _find_user_by_username(target_username)
+    if not target_user_record:
         print(f"Error: User '{target_username}' not found.")
-        conn.close()
         return False
-        
-    conn.commit()
-    conn.close()
+
+    target_user_role = target_user_record['role']
+    encrypted_target_username = target_user_record['username']
+
+    # Role-based authorization check
+    if current_user.role == config.ROLE_SYSTEM_ADMIN and target_user_role != config.ROLE_SERVICE_ENGINEER:
+        print("System Admins can only delete Service Engineers.")
+        secure_logger.log(current_user.username, "Authorization failed", f"Attempted to delete user {target_username} ({target_user_role})", is_suspicious=True)
+        return False
     
-    secure_logger.log(current_user.username, "Deleted user", f"Target Username: {target_username}", is_suspicious=True)
-    print(f"User '{target_username}' deleted successfully.")
-    return True
+    if current_user.role == config.ROLE_SUPER_ADMIN and target_user_role == config.ROLE_SUPER_ADMIN:
+        print("Error: Super Admins cannot delete other Super Admins.")
+        return False
+
+    try:
+        conn = database.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users WHERE username = ?", (encrypted_target_username,))
+        
+        if cursor.rowcount == 0:
+            print(f"Error: User '{target_username}' not found during deletion.")
+            return False
+            
+        conn.commit()
+        secure_logger.log(current_user.username, "Deleted user", f"Target Username: {target_username}", is_suspicious=True)
+        print(f"User '{target_username}' deleted successfully.")
+        return True
+    except Exception as e:
+        print(f"An error occurred while deleting user: {e}")
+        return False
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def reset_user_password(current_user: models.User, target_username: str):
@@ -231,7 +280,7 @@ def update_own_password(current_user: models.User, old_password: str, new_passwo
 # --- Scooter Services ---
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
-def add_scooter(current_user: models.User, serial_number: str, brand: str, model: str, top_speed: int, battery_capacity: int, state_of_charge: int, target_range_soc_min: int, target_range_soc_max: int, location_lat: float, location_lon: float, out_of_service_status: bool, mileage: int, last_maintenance_date: str):
+def add_new_scooter(current_user: models.User, serial_number: str, brand: str, model: str, top_speed: int, battery_capacity: int, state_of_charge: int, target_range_soc_min: int, target_range_soc_max: int, location_lat: float, location_lon: float, mileage: int, last_maintenance_date: str, out_of_service_status: bool = False):
     """Adds a new scooter to the fleet."""
     if not validation.is_valid_scooter_serial(serial_number):
         print("Invalid scooter serial number format. Must be 10 to 17 alphanumeric characters.")
@@ -269,7 +318,7 @@ def add_scooter(current_user: models.User, serial_number: str, brand: str, model
             conn.close()
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN, config.ROLE_SERVICE_ENGINEER])
-def update_scooter(current_user: models.User, serial_number: str, updates: dict):
+def update_scooter(current_user: models.User, scooter_id: int, updates: dict):
     """Updates a scooter's information based on the user's role."""
     allowed_updates = {}
     # Define editable fields for each role
@@ -305,8 +354,8 @@ def update_scooter(current_user: models.User, serial_number: str, updates: dict)
 
     # Construct the SQL query dynamically
     set_clause = ", ".join([f"{key} = ?" for key in allowed_updates.keys()])
-    sql_query = f"UPDATE scooters SET {set_clause} WHERE serial_number = ?"
-    params = list(allowed_updates.values()) + [serial_number]
+    sql_query = f"UPDATE scooters SET {set_clause} WHERE id = ?"
+    params = list(allowed_updates.values()) + [scooter_id]
 
     try:
         conn = database.get_db_connection()
@@ -314,11 +363,11 @@ def update_scooter(current_user: models.User, serial_number: str, updates: dict)
         cursor.execute(sql_query, params)
 
         if cursor.rowcount == 0:
-            print(f"Error: Scooter with serial number '{serial_number}' not found.")
+            print(f"Error: Scooter with ID '{scooter_id}' not found.")
             return False
 
         conn.commit()
-        secure_logger.log(current_user.username, "Updated scooter", f"Serial: {serial_number}, Updates: {allowed_updates}")
+        secure_logger.log(current_user.username, "Updated scooter", f"ID: {scooter_id}, Updates: {allowed_updates}")
         print("Scooter updated successfully.")
         return True
     except Exception as e:
@@ -355,7 +404,7 @@ def delete_scooter(current_user: models.User, serial_number: str):
 # ---  Services ---
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
-def add_traveller(current_user: models.User, first_name, last_name, birthday, 
+def add_new_traveller(current_user: models.User, first_name, last_name, birthday, 
                    gender, street_name, house_number, zip_code, city, email, 
                    mobile_phone, driving_license_number):
     """Adds a new traveller to the database after validation and encryption."""
