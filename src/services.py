@@ -110,58 +110,107 @@ def add_new_user(current_user: models.User, username, password, role, first_name
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def update_user_profile(current_user: models.User, target_username: str, new_profile_data: dict):
-    """Updates a user's first and last name."""
-    # Ensure only allowed roles can be updated by the current user
-    # Logic to prevent role escalation should be here
-    # For now, we only update first/last name
-    
-    conn = database.get_db_connection()
-    cursor = conn.cursor()
-    
-    encrypted_target_username = encryption_manager.encrypt(target_username)
-    encrypted_first_name = encryption_manager.encrypt(new_profile_data['first_name'])
-    encrypted_last_name = encryption_manager.encrypt(new_profile_data['last_name'])
-
-    cursor.execute(
-        "UPDATE users SET first_name = ?, last_name = ? WHERE username = ?",
-        (encrypted_first_name, encrypted_last_name, encrypted_target_username)
-    )
-    
-    if cursor.rowcount == 0:
+    """Updates a user's first and last name, enforcing role hierarchy."""
+    target_user_record = _find_user_by_username(target_username)
+    if not target_user_record:
         print(f"Error: User '{target_username}' not found.")
         return False
-        
-    conn.commit()
-    conn.close()
+
+    target_user_role = target_user_record['role']
+    encrypted_target_username = target_user_record['username']
+
+    # Role-based authorization check
+    if current_user.role == config.ROLE_SYSTEM_ADMIN and target_user_role != config.ROLE_SERVICE_ENGINEER:
+        print("System Admins can only update Service Engineer profiles.")
+        secure_logger.log(current_user.username, "Authorization failed", f"Attempted to update profile of {target_username} ({target_user_role})", is_suspicious=True)
+        return False
     
-    secure_logger.log(current_user.username, "Updated user profile", f"Target Username: {target_username}")
-    print("User profile updated successfully.")
-    return True
+    if not new_profile_data or not any(new_profile_data.values()):
+        print("No new data provided for update.")
+        return False
+
+    # Build the update query dynamically based on provided data
+    update_fields = {}
+    if new_profile_data.get('first_name'):
+        update_fields['first_name'] = encryption_manager.encrypt(new_profile_data['first_name'])
+    if new_profile_data.get('last_name'):
+        update_fields['last_name'] = encryption_manager.encrypt(new_profile_data['last_name'])
+
+    if not update_fields:
+        print("No valid fields to update.")
+        return False
+
+    set_clause = ", ".join([f"{key} = ?" for key in update_fields.keys()])
+    params = list(update_fields.values()) + [encrypted_target_username]
+
+    try:
+        conn = database.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            f"UPDATE users SET {set_clause} WHERE username = ?",
+            tuple(params)
+        )
+        
+        if cursor.rowcount == 0:
+            print(f"Error: User '{target_username}' not found during update.")
+            return False
+            
+        conn.commit()
+        secure_logger.log(current_user.username, "Updated user profile", f"Target Username: {target_username}")
+        print("User profile updated successfully.")
+        return True
+    except Exception as e:
+        print(f"An error occurred while updating user profile: {e}")
+        return False
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
+
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def delete_user(current_user: models.User, target_username: str):
-    """Deletes a user from the system."""
+    """Deletes a user from the system, enforcing role hierarchy."""
     if current_user.username.lower() == target_username.lower():
         print("Error: You cannot delete your own account this way.")
         return False
 
-    encrypted_target_username = encryption_manager.encrypt(target_username)
-
-    conn = database.get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM users WHERE username = ?", (encrypted_target_username,))
-    
-    if cursor.rowcount == 0:
+    target_user_record = _find_user_by_username(target_username)
+    if not target_user_record:
         print(f"Error: User '{target_username}' not found.")
-        conn.close()
         return False
-        
-    conn.commit()
-    conn.close()
+
+    target_user_role = target_user_record['role']
+    encrypted_target_username = target_user_record['username']
+
+    # Role-based authorization check
+    if current_user.role == config.ROLE_SYSTEM_ADMIN and target_user_role != config.ROLE_SERVICE_ENGINEER:
+        print("System Admins can only delete Service Engineers.")
+        secure_logger.log(current_user.username, "Authorization failed", f"Attempted to delete user {target_username} ({target_user_role})", is_suspicious=True)
+        return False
     
-    secure_logger.log(current_user.username, "Deleted user", f"Target Username: {target_username}", is_suspicious=True)
-    print(f"User '{target_username}' deleted successfully.")
-    return True
+    if current_user.role == config.ROLE_SUPER_ADMIN and target_user_role == config.ROLE_SUPER_ADMIN:
+        print("Error: Super Admins cannot delete other Super Admins.")
+        return False
+
+    try:
+        conn = database.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users WHERE username = ?", (encrypted_target_username,))
+        
+        if cursor.rowcount == 0:
+            print(f"Error: User '{target_username}' not found during deletion.")
+            return False
+            
+        conn.commit()
+        secure_logger.log(current_user.username, "Deleted user", f"Target Username: {target_username}", is_suspicious=True)
+        print(f"User '{target_username}' deleted successfully.")
+        return True
+    except Exception as e:
+        print(f"An error occurred while deleting user: {e}")
+        return False
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def reset_user_password(current_user: models.User, target_username: str):
@@ -228,20 +277,175 @@ def update_own_password(current_user: models.User, old_password: str, new_passwo
     print("Password updated successfully.")
     return True
 
-# --- Traveller Services ---
+# --- Scooter Services ---
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
-def add_new_traveller(current_user: models.User, traveller_data: dict):
+def add_new_scooter(current_user: models.User, serial_number: str, brand: str, model: str, top_speed: int, battery_capacity: int, state_of_charge: int, target_range_soc_min: int, target_range_soc_max: int, location_lat: str, location_lon: str, mileage: int, last_maintenance_date: str, out_of_service_status: bool = False):
+    """Adds a new scooter to the fleet."""
+    if not validation.is_valid_scooter_serial(serial_number):
+        print("Invalid scooter serial number format. Must be 10 to 17 alphanumeric characters.")
+        return False
+    if not validation.is_valid_location_coordinate(location_lat):
+        print("Invalid latitude format. Must have 5 decimal places (e.g., 51.92250).")
+        return False
+    if not validation.is_valid_location_coordinate(location_lon):
+        print("Invalid longitude format. Must have 5 decimal places (e.g., 4.47917).")
+        return False
+    if not validation.is_valid_iso_date(last_maintenance_date):
+        print("Invalid date format. Must be YYYY-MM-DD.")
+        return False
+
+    try:
+        conn = database.get_db_connection()
+        cursor = conn.cursor()
+        in_service_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute(
+            "INSERT INTO scooters (serial_number, brand, model, in_service_date, top_speed, battery_capacity, state_of_charge, target_range_soc_min, target_range_soc_max, location_lat, location_lon, out_of_service_status, mileage, last_maintenance_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (serial_number, brand, model, in_service_date, top_speed, battery_capacity, state_of_charge, target_range_soc_min, target_range_soc_max, location_lat, location_lon, out_of_service_status, mileage, last_maintenance_date)
+        )
+        conn.commit()
+        secure_logger.log(current_user.username, "Added new scooter", f"Serial: {serial_number}")
+        print("Scooter added successfully.")
+        return True
+    except sqlite3.IntegrityError:
+        print("Error: A scooter with this serial number already exists.")
+        return False
+    except Exception as e:
+        print(f"An error occurred while adding the scooter: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN, config.ROLE_SERVICE_ENGINEER])
+def update_scooter(current_user: models.User, scooter_id: int, updates: dict):
+    """Updates a scooter's information based on the user's role."""
+    allowed_updates = {}
+    # Define editable fields for each role
+    service_engineer_fields = ['state_of_charge', 'target_range_soc_min', 'target_range_soc_max', 'location_lat', 'location_lon', 'out_of_service_status', 'mileage', 'last_maintenance_date']
+    admin_fields = service_engineer_fields + ['brand', 'model', 'serial_number', 'top_speed', 'battery_capacity']
+
+    # Determine which fields the current user can edit
+    if current_user.role == config.ROLE_SERVICE_ENGINEER:
+        editable_fields = service_engineer_fields
+    else: # Super Admin and System Admin
+        editable_fields = admin_fields
+
+    # Filter the updates dictionary to only include editable fields
+    for key, value in updates.items():
+        if key in editable_fields:
+            # Validate input before adding to allowed_updates
+            if key in ['location_lat', 'location_lon'] and not validation.is_valid_location_coordinate(value):
+                print(f"Invalid format for {key}. Must have 5 decimal places.")
+                return False
+            if key == 'last_maintenance_date' and not validation.is_valid_iso_date(value):
+                print(f"Invalid date format for {key}. Must be YYYY-MM-DD.")
+                return False
+            if key == 'serial_number' and not validation.is_valid_scooter_serial(value):
+                print(f"Invalid format for {key}. Must be 10 to 17 alphanumeric characters.")
+                return False
+            allowed_updates[key] = value
+        else:
+            print(f"Warning: You are not authorized to update the '{key}' field. It will be ignored.")
+
+    if not allowed_updates:
+        print("No valid fields to update or all updates were unauthorized.")
+        return False
+
+    # Construct the SQL query dynamically
+    set_clause = ", ".join([f"{key} = ?" for key in allowed_updates.keys()])
+    sql_query = f"UPDATE scooters SET {set_clause} WHERE id = ?"
+    params = list(allowed_updates.values()) + [scooter_id]
+
+    try:
+        conn = database.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(sql_query, params)
+
+        if cursor.rowcount == 0:
+            print(f"Error: Scooter with ID '{scooter_id}' not found.")
+            return False
+
+        conn.commit()
+        secure_logger.log(current_user.username, "Updated scooter", f"ID: {scooter_id}, Updates: {allowed_updates}")
+        print("Scooter updated successfully.")
+        return True
+    except Exception as e:
+        print(f"An error occurred while updating the scooter: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
+def delete_scooter(current_user: models.User, serial_number: str):
+    """Deletes a scooter from the system."""
+    try:
+        conn = database.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM scooters WHERE serial_number = ?", (serial_number,))
+
+        if cursor.rowcount == 0:
+            print(f"Error: Scooter with serial number '{serial_number}' not found.")
+            return False
+
+        conn.commit()
+        secure_logger.log(current_user.username, "Deleted scooter", f"Serial: {serial_number}", is_suspicious=True)
+        print(f"Scooter '{serial_number}' deleted successfully.")
+        return True
+    except Exception as e:
+        print(f"An error occurred while deleting the scooter: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+# ---  Services ---
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
+def add_new_traveller(current_user: models.User, first_name, last_name, birthday, 
+                   gender, street_name, house_number, zip_code, city, email, 
+                   mobile_phone, driving_license_number):
     """Adds a new traveller to the database after validation and encryption."""
-    # 1. Validate all traveller_data fields (example for a few)
-    if not validation.is_valid_zip_code(traveller_data['zip_code']):
-        print("Invalid Zip Code format.")
+    # Predefined city list
+    allowed_cities = [
+        "Amsterdam", "Rotterdam", "Utrecht", "Eindhoven", "Groningen",
+        "Maastricht", "Haarlem", "Leiden", "Nijmegen", "Zwolle"
+    ]
+    # Validate all fields
+    if not validation.is_valid_first_name(first_name):
+        print("Invalid First Name. Only letters, 2-30 characters.")
         return False
-    if not validation.is_valid_phone_digits(traveller_data['mobile_phone']):
-        print("Invalid mobile phone format.")
+    if not validation.is_valid_last_name(last_name):
+        print("Invalid Last Name. Only letters, 2-30 characters.")
         return False
-    if not validation.is_valid_driving_license(traveller_data['driving_license_number']):
-        print("Invalid driving license format.")
+    if not validation.is_valid_iso_date(birthday):
+        print("Invalid Birthday. Format must be YYYY-MM-DD.")
+        return False
+    if not validation.is_valid_gender(gender):
+        print("Invalid Gender. Must be 'male' or 'female'.")
+        return False
+    if not validation.is_valid_street_name(street_name):
+        print("Invalid Street Name. Letters and spaces, 2-50 characters.")
+        return False
+    if not validation.is_valid_house_number(house_number):
+        print("Invalid House Number. 1-6 digits.")
+        return False
+    if not validation.is_valid_zip_code(zip_code):
+        print("Invalid Zip Code format. DDDDXX (e.g., 1234AB).")
+        return False
+    if city not in allowed_cities:
+        print(f"Invalid City. Must be one of: {', '.join(allowed_cities)}")
+        return False
+    if not validation.is_valid_email(email):
+        print("Invalid Email Address format.")
+        return False
+    if not validation.is_valid_phone_digits(mobile_phone):
+        print("Invalid Mobile Phone. 8 digits required.")
+        return False
+    if not validation.is_valid_driving_license(driving_license_number):
+        print("Invalid Driving License Number. XXDDDDDDD or XDDDDDDDD.")
         return False
 
     try:
@@ -249,7 +453,19 @@ def add_new_traveller(current_user: models.User, traveller_data: dict):
         cursor = conn.cursor()
         
         # 2. Encrypt all PII fields
-        encrypted_data = {key: encryption_manager.encrypt(str(value)) for key, value in traveller_data.items()}
+        encrypted_data = {
+            "first_name": encryption_manager.encrypt(first_name),
+            "last_name": encryption_manager.encrypt(last_name),
+            "birthday": encryption_manager.encrypt(birthday),
+            "gender": encryption_manager.encrypt(gender),
+            "street_name": encryption_manager.encrypt(street_name),
+            "house_number": encryption_manager.encrypt(house_number),
+            "zip_code": encryption_manager.encrypt(zip_code),
+            "city": encryption_manager.encrypt(city),
+            "email": encryption_manager.encrypt(email),
+            "mobile_phone": encryption_manager.encrypt(mobile_phone),
+            "driving_license_number": encryption_manager.encrypt(driving_license_number)
+        }
         
         # 3. Insert into DB using parameterized query
         cursor.execute("""
@@ -265,7 +481,7 @@ def add_new_traveller(current_user: models.User, traveller_data: dict):
         conn.commit()
         
         # 4. Log the action
-        secure_logger.log(current_user.username, "Added new traveller", f"Traveller email: {traveller_data.get('email')}")
+        secure_logger.log(current_user.username, "Added new traveller", f"Traveller email: {email}")
         print("Traveller added successfully.")
         return True
     except Exception as e:
@@ -307,8 +523,45 @@ def search_travellers(current_user: models.User, search_key: str):
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def update_traveller(current_user: models.User, traveller_id: int, new_data: dict):
     """Updates an existing traveller's information."""
-    # Add validation for new_data here if necessary
-    
+    allowed_cities = [
+        "Amsterdam", "Rotterdam", "Utrecht", "Eindhoven", "Groningen",
+        "Maastricht", "Haarlem", "Leiden", "Nijmegen", "Zwolle"
+    ]
+    # Validate fields if present in update
+    if 'first_name' in new_data and not validation.is_valid_first_name(new_data['first_name']):
+        print("Invalid First Name. Only letters, 2-30 characters.")
+        return False
+    if 'last_name' in new_data and not validation.is_valid_last_name(new_data['last_name']):
+        print("Invalid Last Name. Only letters, 2-30 characters.")
+        return False
+    if 'birthday' in new_data and not validation.is_valid_iso_date(new_data['birthday']):
+        print("Invalid Birthday. Format must be YYYY-MM-DD.")
+        return False
+    if 'gender' in new_data and not validation.is_valid_gender(new_data['gender']):
+        print("Invalid Gender. Must be 'male' or 'female'.")
+        return False
+    if 'street_name' in new_data and not validation.is_valid_street_name(new_data['street_name']):
+        print("Invalid Street Name. Letters and spaces, 2-50 characters.")
+        return False
+    if 'house_number' in new_data and not validation.is_valid_house_number(new_data['house_number']):
+        print("Invalid House Number. 1-6 digits.")
+        return False
+    if 'zip_code' in new_data and not validation.is_valid_zip_code(new_data['zip_code']):
+        print("Invalid Zip Code format. DDDDXX (e.g., 1234AB).")
+        return False
+    if 'city' in new_data and new_data['city'] not in allowed_cities:
+        print(f"Invalid City. Must be one of: {', '.join(allowed_cities)}")
+        return False
+    if 'email' in new_data and not validation.is_valid_email(new_data['email']):
+        print("Invalid Email Address format.")
+        return False
+    if 'mobile_phone' in new_data and not validation.is_valid_phone_digits(new_data['mobile_phone']):
+        print("Invalid Mobile Phone. 8 digits required.")
+        return False
+    if 'driving_license_number' in new_data and not validation.is_valid_driving_license(new_data['driving_license_number']):
+        print("Invalid Driving License Number. XXDDDDDDD or XDDDDDDDD.")
+        return False
+
     encrypted_data = {key: encryption_manager.encrypt(str(value)) for key, value in new_data.items()}
     
     conn = database.get_db_connection()
@@ -351,157 +604,6 @@ def delete_traveller(current_user: models.User, traveller_id: int):
     secure_logger.log(current_user.username, "Deleted traveller", f"Traveller ID: {traveller_id}", is_suspicious=True)
     print(f"Traveller with ID {traveller_id} deleted successfully.")
     return True
-
-# --- Scooter Services ---
-
-@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN, config.ROLE_SERVICE_ENGINEER])
-def update_scooter_location(current_user: models.User, scooter_id: int, new_lat: float, new_lon: float):
-    """Updates the location of a specific scooter."""
-    return update_scooter(current_user, scooter_id, {"location_lat": new_lat, "location_lon": new_lon})
-
-
-@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
-def add_new_scooter(current_user: models.User, scooter_data: dict):
-    """Adds a new scooter to the fleet."""
-    if not validation.is_valid_scooter_serial(scooter_data['serial_number']):
-        print("Invalid scooter serial number format.")
-        return False
-        
-    try:
-        # Encrypt all PII and sensitive fields before insertion
-        encrypted_data = {key: encryption_manager.encrypt(str(value)) for key, value in scooter_data.items()}
-
-        conn = database.get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO scooters (
-                serial_number, brand, model, in_service_date, top_speed, battery_capacity,
-                state_of_charge, target_range_soc_min, target_range_soc_max, location_lat,
-                location_lon, out_of_service_status, mileage, last_maintenance_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            encrypted_data['serial_number'], encrypted_data['brand'], encrypted_data['model'],
-            datetime.now().strftime("%Y-%m-%d"), encrypted_data.get('top_speed'), 
-            encrypted_data.get('battery_capacity'), encrypted_data.get('state_of_charge'), 
-            encrypted_data.get('target_range_soc_min'), encrypted_data.get('target_range_soc_max'),
-            encrypted_data.get('location_lat'), encrypted_data.get('location_lon'), 
-            encrypted_data.get('out_of_service_status', encryption_manager.encrypt('0')), 
-            encrypted_data.get('mileage'), encrypted_data.get('last_maintenance_date')
-        ))
-        conn.commit()
-        secure_logger.log(current_user.username, "Added new scooter", f"Serial: {scooter_data['serial_number']}")
-        print("Scooter added successfully.")
-        return True
-    except sqlite3.IntegrityError:
-        print(f"Error: Scooter with serial number '{scooter_data['serial_number']}' already exists.")
-        return False
-    except Exception as e:
-        print(f"An error occurred while adding scooter: {e}")
-        return False
-    finally:
-        if 'conn' in locals() and conn:
-            conn.close()
-
-
-@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN, config.ROLE_SERVICE_ENGINEER])
-def update_scooter(current_user: models.User, scooter_id: int, new_data: dict):
-    """Updates an existing scooter's information based on user role."""
-    
-    allowed_fields_for_service_engineer = [
-        'state_of_charge', 'target_range_soc_min', 'target_range_soc_max', 
-        'location_lat', 'location_lon', 'out_of_service_status', 'mileage', 
-        'last_maintenance_date'
-    ]
-
-    if current_user.role == config.ROLE_SERVICE_ENGINEER:
-        # Filter new_data to only include fields a Service Engineer can edit
-        disallowed_fields = [field for field in new_data if field not in allowed_fields_for_service_engineer]
-        if disallowed_fields:
-            print(f"Access Denied. You cannot edit these fields: {', '.join(disallowed_fields)}")
-            secure_logger.log(current_user.username, "Authorization failed", f"Attempted to edit disallowed scooter fields: {', '.join(disallowed_fields)}", is_suspicious=True)
-            return False
-
-    # Encrypt the new data before updating
-    encrypted_data = {key: encryption_manager.encrypt(str(value)) for key, value in new_data.items()}
-
-    conn = database.get_db_connection()
-    cursor = conn.cursor()
-    
-    set_clause = ", ".join([f"{key} = ?" for key in encrypted_data.keys()])
-    params = list(encrypted_data.values())
-    params.append(scooter_id)
-    
-    query = f"UPDATE scooters SET {set_clause} WHERE id = ?"
-    
-    cursor.execute(query, tuple(params))
-    
-    if cursor.rowcount == 0:
-        print(f"Error: Scooter with ID {scooter_id} not found.")
-        conn.close()
-        return False
-        
-    conn.commit()
-    conn.close()
-    secure_logger.log(current_user.username, "Updated scooter details", f"Scooter ID: {scooter_id}")
-    print("Scooter information updated successfully.")
-    return True
-
-
-@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
-def delete_scooter(current_user: models.User, scooter_id: int):
-    """Deletes a scooter from the system."""
-    conn = database.get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM scooters WHERE id = ?", (scooter_id,))
-    
-    if cursor.rowcount == 0:
-        print(f"Error: Scooter with ID {scooter_id} not found.")
-        conn.close()
-        return False
-
-    conn.commit()
-    conn.close()
-    secure_logger.log(current_user.username, "Deleted scooter", f"Scooter ID: {scooter_id}", is_suspicious=True)
-    print(f"Scooter with ID {scooter_id} deleted successfully.")
-    return True
-
-@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN, config.ROLE_SERVICE_ENGINEER])
-def search_scooters(current_user: models.User, search_key: str):
-    """
-    Searches for scooters by a partial key.
-    NOTE: This is computationally expensive as it decrypts all records in memory.
-    """
-    conn = database.get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM scooters")
-    all_scooters = cursor.fetchall()
-    conn.close()
-
-    results = []
-    search_key_lower = search_key.lower()
-    
-    searchable_fields = ['brand', 'model', 'serial_number']
-
-    for row in all_scooters:
-        # Decrypt all fields to make them searchable and readable
-        try:
-            decrypted_row = {key: (encryption_manager.decrypt(value) if isinstance(value, bytes) else value) for key, value in dict(row).items()}
-        except Exception:
-            # If decryption fails for a row, skip it or handle error
-            # For now, we just print a message and skip.
-            # print(f"Warning: Could not decrypt row {row['id']}, skipping.")
-            continue
-
-        match = False
-        for field in searchable_fields:
-            if field in decrypted_row and search_key_lower in str(decrypted_row[field]).lower():
-                match = True
-                break
-        
-        if match:
-            results.append(decrypted_row)
-            
-    return results
 
 # --- Backup and Restore Services ---
 

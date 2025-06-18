@@ -1,6 +1,7 @@
 # src/validation.py
 
 import re
+from datetime import datetime
 
 def is_valid_username(username: str) -> bool:
     """
@@ -54,3 +55,42 @@ def is_valid_scooter_serial(serial: str) -> bool:
     """Validates Scooter Serial Number: 10 to 17 alphanumeric characters."""
     pattern = r"^[a-zA-Z0-9]{10,17}$"
     return re.match(pattern, serial) is not None
+
+def is_valid_location_coordinate(coord: str) -> bool:
+    """Validates GPS coordinate format (a number with an optional sign and 5 decimal places)."""
+    # This pattern ensures there are digits both before and after the decimal point.
+    pattern = r"^[+-]?\d+\.\d{5}$"
+    return re.match(pattern, str(coord)) is not None
+
+def is_valid_iso_date(date_string: str) -> bool:
+    """Validates date format: YYYY-MM-DD."""
+    try:
+        datetime.strptime(date_string, '%Y-%m-%d')
+        return True
+    except ValueError:
+        return False
+
+def is_valid_first_name(name: str) -> bool:
+    """Validates first name: only letters, 2-30 chars."""
+    return bool(re.match(r"^[A-Za-z]{2,30}$", name))
+
+def is_valid_last_name(name: str) -> bool:
+    """Validates last name: only letters, 2-30 chars."""
+    return bool(re.match(r"^[A-Za-z]{2,30}$", name))
+
+def is_valid_email(email: str) -> bool:
+    """Validates email address format."""
+    pattern = r"^[\w\.-]+@[\w\.-]+\.\w{2,}$"
+    return re.match(pattern, email) is not None
+
+def is_valid_gender(gender: str) -> bool:
+    """Validates gender: must be 'male' or 'female'."""
+    return gender.lower() in ['male', 'female']
+
+def is_valid_house_number(house_number: str) -> bool:
+    """Validates house number: 1-6 digits."""
+    return bool(re.match(r"^\d{1,6}$", str(house_number)))
+
+def is_valid_street_name(street: str) -> bool:
+    """Validates street name: letters, spaces, 2-50 chars."""
+    return bool(re.match(r"^[A-Za-z ]{2,50}$", street))
