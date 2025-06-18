@@ -286,10 +286,10 @@ def add_new_scooter(current_user: models.User, serial_number: str, brand: str, m
         print("Invalid scooter serial number format. Must be 10 to 17 alphanumeric characters.")
         return False
     if not validation.is_valid_location_coordinate(location_lat):
-        print("Invalid latitude format. Must have at least 5 decimal places (e.g., 51.92250).")
+        print("Invalid latitude format. Must have at least 5 decimal places (e.g., 51.92250 between 51.8 and 52.0).")
         return False
     if not validation.is_valid_location_coordinate(location_lon):
-        print("Invalid longitude format. Must have at least 5 decimal places (e.g., 4.47917).")
+        print("Invalid longitude format. Must have at least 5 decimal places (e.g., 4.47917) between 4.3, 4.6.")
         return False
     if not validation.is_in_rotterdam_region(float(location_lat), float(location_lon)):
         print("Location is outside of the Rotterdam region.")
@@ -340,6 +340,27 @@ def add_new_scooter(current_user: models.User, serial_number: str, brand: str, m
             conn.close()
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN, config.ROLE_SERVICE_ENGINEER])
+def get_scooter_details(current_user: models.User, scooter_id: int) -> dict | None:
+    """Retrieves and decrypts all details for a single scooter by its ID."""
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM scooters WHERE id = ?", (scooter_id,))
+    scooter_row = cursor.fetchone()
+    conn.close()
+
+    if not scooter_row:
+        print(f"Error: Scooter with ID '{scooter_id}' not found.")
+        return None
+
+    try:
+        decrypted_row = {key: (encryption_manager.decrypt(value) if isinstance(value, bytes) else value) for key, value in dict(scooter_row).items()}
+        return decrypted_row
+    except Exception as e:
+        print(f"An error occurred during scooter data decryption: {e}")
+        secure_logger.log(current_user.username, "Decryption failed", f"Failed to decrypt data for scooter ID {scooter_id}", is_suspicious=True)
+        return None
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN, config.ROLE_SERVICE_ENGINEER])
 def update_scooter(current_user: models.User, scooter_id: int, updates: dict):
     """Updates a scooter's information based on the user's role."""
     allowed_updates = {}
@@ -373,35 +394,6 @@ def update_scooter(current_user: models.User, scooter_id: int, updates: dict):
     if not allowed_updates:
         print("No valid fields to update or all updates were unauthorized.")
         return False
-
-    # New validation for location
-    if 'location_lat' in allowed_updates or 'location_lon' in allowed_updates:
-        conn = None
-        try:
-            conn = database.get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT location_lat, location_lon FROM scooters WHERE id = ?", (scooter_id,))
-            scooter_row = cursor.fetchone()
-
-            if not scooter_row:
-                print(f"Error: Scooter with ID '{scooter_id}' not found.")
-                return False
-
-            current_lat = float(encryption_manager.decrypt(scooter_row['location_lat']))
-            current_lon = float(encryption_manager.decrypt(scooter_row['location_lon']))
-
-            new_lat = float(allowed_updates.get('location_lat', current_lat))
-            new_lon = float(allowed_updates.get('location_lon', current_lon))
-
-            if not validation.is_in_rotterdam_region(new_lat, new_lon):
-                print("Location is outside of the Rotterdam region.")
-                return False
-        except Exception as e:
-            print(f"An error occurred during location validation: {e}")
-            return False
-        finally:
-            if conn:
-                conn.close()
 
     encrypted_updates = {key: encryption_manager.encrypt(str(value)) for key, value in allowed_updates.items()}
 
