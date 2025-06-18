@@ -38,8 +38,9 @@ def display_results(results: list[dict]):
 def prompt_for_new_user(creator_role):
     """Gets data for a new user from the console."""
     print_header("Add New User")
-    username = input("Enter username (8-10 chars, starts with letter/_): ")
-    password = input("Enter password (12-30 chars, mix of cases, num, special): ")
+    print_user_syntax_rules()
+    username = input("Enter username: ")
+    password = getpass.getpass("Enter password: ")
     
     allowed_roles = []
     if creator_role == config.ROLE_SUPER_ADMIN:
@@ -70,6 +71,19 @@ def prompt_for_new_user(creator_role):
         "username": username, "password": password, "role": role,
         "first_name": first_name, "last_name": last_name
     }
+
+def print_user_syntax_rules():
+    print("""
+User Account Syntax Rules:
+- Username:
+  - Length: 8-10 characters.
+  - Starts with a letter or underscore.
+  - Allowed characters: letters, numbers, underscore, apostrophe, period.
+  - Case-insensitive.
+- Password:
+  - Length: 12-30 characters.
+  - Must contain at least one lowercase letter, one uppercase letter, one digit, and one special character (~!@#$%&_-+=`|\(){}[]:;'<>,.?/).
+""")
 
 def print_traveller_syntax_rules():
     print("""
@@ -117,9 +131,24 @@ def prompt_for_new_traveller():
     data['driving_license_number'] = input("Enter driving license (e.g., AB1234567): ").upper()
     return data
 
+def print_scooter_syntax_rules():
+    print("""
+Scooter Data Attribute Syntax Rules:
+- Serial Number: 10 to 17 alphanumeric characters.
+- Top Speed: Number (e.g., 25.5).
+- Battery Capacity: Number (e.g., 1000).
+- State of Charge (SoC): Percentage (0-100).
+- Target SoC Min/Max: Percentage (0-100).
+- Location (Lat/Lon): Real-world coordinates with at least 5 decimal places (e.g., 51.92250, 4.47917).
+- Out-of-service Status: 0 for In-Service, 1 for Out-of-Service.
+- Mileage: Number (e.g., 150.7).
+- Last Maintenance Date: Format YYYY-MM-DD (e.g., 2025-06-18).
+""")
+
 def prompt_for_new_scooter():
     """Gets data for a new scooter from the console."""
     print_header("Add New Scooter")
+    print_scooter_syntax_rules()
     data = {}
     try:
         data['serial_number'] = input("Enter serial number (10-17 alphanumeric): ")
@@ -142,6 +171,7 @@ def prompt_for_new_scooter():
 def prompt_for_scooter_update(current_user: models.User):
     """Gets data for updating a scooter."""
     print_header("Update Scooter Details")
+    print_scooter_syntax_rules()
     try:
         scooter_id = int(input("Enter Scooter ID to update: "))
         print("Enter new data. Press Enter to skip a field.")
@@ -192,6 +222,7 @@ def handle_view_logs(current_user: models.User):
 
 def handle_update_own_password(current_user: models.User):
     print_header("Update My Password")
+    print_user_syntax_rules()
     old_password = getpass.getpass("Enter your current password: ")
     new_password = getpass.getpass("Enter your new password: ")
     confirm_password = getpass.getpass("Confirm new password: ")
@@ -219,6 +250,7 @@ def show_service_engineer_menu(current_user: models.User):
             if scooter_id and update_data:
                 services.update_scooter(current_user, scooter_id, update_data)
         elif choice == '2':
+            print_scooter_syntax_rules()
             key = input("Enter search key (brand, model, or serial number): ")
             results = services.search_scooters(current_user, key)
             display_results(results)
@@ -267,6 +299,7 @@ def show_super_admin_menu(current_user: models.User):
             if traveller_data:
                 services.add_new_traveller(current_user, traveller_data)
         elif choice == '2':
+            print_traveller_syntax_rules()
             key = input("Enter search key (any traveller info): ")
             results = services.search_travellers(current_user, key)
             display_results(results)
@@ -299,6 +332,7 @@ def show_super_admin_menu(current_user: models.User):
             except ValueError:
                 print("Invalid ID.")
         elif choice == '8':
+            print_scooter_syntax_rules()
             key = input("Enter search key (brand, model, or serial number): ")
             results = services.search_scooters(current_user, key)
             display_results(results)
@@ -307,6 +341,7 @@ def show_super_admin_menu(current_user: models.User):
             if user_data:
                 services.add_new_user(current_user, **user_data)
         elif choice == '10':
+            print_user_syntax_rules()
             target_user = input("Enter username to reset password for: ")
             services.reset_user_password(current_user, target_user)
         elif choice == '11':
@@ -322,6 +357,7 @@ def show_super_admin_menu(current_user: models.User):
             code = input("Enter one-time restore code (press Enter if not required): ")
             services.restore_from_backup(current_user, filename, code or None)
         elif choice == '15':
+            print_user_syntax_rules()
             target_user = input("Enter System Admin username to generate code for: ")
             backup_file = input("Enter the exact backup filename the code is for: ")
             services.generate_restore_code(current_user, target_user, backup_file)
@@ -366,6 +402,7 @@ def show_system_admin_menu(current_user: models.User):
             if traveller_data:
                 services.add_new_traveller(current_user, traveller_data)
         elif choice == '2':
+            print_traveller_syntax_rules()
             key = input("Enter search key (any traveller info): ")
             results = services.search_travellers(current_user, key)
             display_results(results)
@@ -398,6 +435,7 @@ def show_system_admin_menu(current_user: models.User):
             except ValueError:
                 print("Invalid ID.")
         elif choice == '8':
+            print_scooter_syntax_rules()
             key = input("Enter search key (brand, model, or serial number): ")
             results = services.search_scooters(current_user, key)
             display_results(results)
@@ -406,6 +444,7 @@ def show_system_admin_menu(current_user: models.User):
             if user_data:
                 services.add_new_user(current_user, **user_data)
         elif choice == '10':
+            print_user_syntax_rules()
             target_user = input("Enter username to reset password for: ")
             services.reset_user_password(current_user, target_user)
         elif choice == '11':
@@ -435,6 +474,7 @@ def temp_system_admin_handler(choice, current_user):
         if traveller_data:
             services.add_new_traveller(current_user, traveller_data)
     elif choice == '2':
+        print_traveller_syntax_rules()
         key = input("Enter search key (any traveller info): ")
         results = services.search_travellers(current_user, key)
         display_results(results)
