@@ -718,11 +718,12 @@ def generate_restore_code(current_user: models.User, target_system_admin_usernam
     # ... (omitted for brevity)
 
     code = secrets.token_hex(16)
+    encrypted_code = encryption_manager.encrypt(code)
     conn = database.get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
         "INSERT INTO restore_codes (code, backup_filename, system_admin_username, generated_at) VALUES (?, ?, ?, ?)",
-        (code, backup_filename, target_system_admin_username, datetime.now().isoformat())
+        (encrypted_code, backup_filename, target_system_admin_username, datetime.now().isoformat())
     )
     conn.commit()
     conn.close()
@@ -753,12 +754,12 @@ def restore_from_backup(current_user: models.User, backup_filename: str, restore
         conn = database.get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT * FROM restore_codes WHERE code = ? AND system_admin_username = ? AND backup_filename = ? AND is_used = 0",
-            (restore_code, current_user.username, backup_filename)
+            "SELECT * FROM restore_codes WHERE system_admin_username = ? AND backup_filename = ? AND is_used = 0",
+            (current_user.username, backup_filename)
         )
         code_data = cursor.fetchone()
         
-        if not code_data:
+        if not code_data or encryption_manager.decrypt(code_data['code']) != restore_code:
             print("Error: Invalid, expired, or incorrect restore code for this backup/user.")
             secure_logger.log(current_user.username, "Failed backup restore", f"Invalid code used for {backup_filename}", is_suspicious=True)
             conn.close()
