@@ -33,14 +33,79 @@ def display_results(results: list[dict]):
         print(row_line)
     print()
 
+# --- Input Validation and Prompting ---
+
+def prompt_with_validation(prompt_text: str, validation_func, error_message: str, optional: bool = False, transform_func=None):
+    """Prompts user for input and validates it using the provided function. Loops until valid input is given."""
+    while True:
+        user_input = input(prompt_text)
+        if optional and not user_input:
+            return None
+        
+        if validation_func(user_input):
+            return transform_func(user_input) if transform_func else user_input
+        else:
+            print(f"Invalid input: {error_message}")
+
+def prompt_for_float(prompt_text: str, min_val=None, max_val=None, optional: bool = False):
+    """Prompts user for a float and validates range. Loops until valid input is given."""
+    while True:
+        user_input = input(prompt_text)
+        if optional and not user_input:
+            return None
+        try:
+            value = float(user_input)
+            if (min_val is not None and value < min_val) or \
+               (max_val is not None and value > max_val):
+                range_msg = []
+                if min_val is not None: range_msg.append(f"at least {min_val}")
+                if max_val is not None: range_msg.append(f"at most {max_val}")
+                print(f"Value is out of range. Please enter a value {' and '.join(range_msg)}.")
+                continue
+            return value
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+
+def prompt_for_int(prompt_text: str, min_val=None, max_val=None, optional: bool = False):
+    """Prompts user for an integer and validates range. Loops until valid input is given."""
+    while True:
+        user_input = input(prompt_text)
+        if optional and not user_input:
+            return None
+        try:
+            value = int(user_input)
+            if (min_val is not None and value < min_val) or \
+               (max_val is not None and value > max_val):
+                range_msg = []
+                if min_val is not None: range_msg.append(f"at least {min_val}")
+                if max_val is not None: range_msg.append(f"at most {max_val}")
+                print(f"Value is out of range. Please enter a value {' and '.join(range_msg)}.")
+                continue
+            return value
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+
+
 # --- Input Prompt Functions ---
 
 def prompt_for_new_user(creator_role):
-    """Gets data for a new user from the console."""
+    """Gets data for a new user from the console with immediate validation."""
     print_header("Add New User")
     print_user_syntax_rules()
-    username = input("Enter username: ")
-    password = getpass.getpass("Enter password: ")
+
+    username = prompt_with_validation(
+        "Enter username: ",
+        validation.is_valid_username,
+        "Username must be 8-10 chars, start with letter/_, and contain only letters, numbers, _, ', '.",
+        optional=False
+    )
+    
+    while True:
+        password = getpass.getpass("Enter password: ")
+        if validation.is_valid_password(password):
+            break
+        else:
+            print("Password does not meet requirements. Please try again.")
     
     allowed_roles = []
     if creator_role == config.ROLE_SUPER_ADMIN:
@@ -52,17 +117,16 @@ def prompt_for_new_user(creator_role):
         print("You are not authorized to create new users.")
         return None
 
-    print("Allowed roles to create: " + ", ".join(allowed_roles))
-    role_input = input(f"Enter role ({'/'.join(r.split()[0] for r in allowed_roles)}): ").strip().lower()
-    
     role = None
-    if 'system' in role_input and config.ROLE_SYSTEM_ADMIN in allowed_roles:
-        role = config.ROLE_SYSTEM_ADMIN
-    elif 'service' in role_input and config.ROLE_SERVICE_ENGINEER in allowed_roles:
-        role = config.ROLE_SERVICE_ENGINEER
-    else:
-        print("Invalid role selected.")
-        return None
+    while role is None:
+        print("Allowed roles to create: " + ", ".join(allowed_roles))
+        role_input = input(f"Enter role ({'/'.join(r.split()[0] for r in allowed_roles)}): ").strip().lower()
+        if 'system' in role_input and config.ROLE_SYSTEM_ADMIN in allowed_roles:
+            role = config.ROLE_SYSTEM_ADMIN
+        elif 'service' in role_input and config.ROLE_SERVICE_ENGINEER in allowed_roles:
+            role = config.ROLE_SERVICE_ENGINEER
+        else:
+            print("Invalid role selected.")
 
     first_name = input("Enter first name: ")
     last_name = input("Enter last name: ")
@@ -102,33 +166,28 @@ Traveller Data Attribute Syntax Rules:
 """)
 
 def prompt_for_new_traveller():
-    """Gets data for a new traveller from the console."""
+    """Gets data for a new traveller from the console with immediate validation."""
     print_header("Add New Traveller")
     print_traveller_syntax_rules()
     data = {}
-    data['first_name'] = input("Enter first name: ")
-    data['last_name'] = input("Enter last name: ")
-    data['birthday'] = input("Enter birthday (YYYY-MM-DD): ")
-    data['gender'] = input("Enter gender: (Male / Female)")
-    data['street_name'] = input("Enter street name: ")
-    data['house_number'] = input("Enter house number: ")
-    data['zip_code'] = input("Enter zip code (e.g., 1234AB): ").upper()
+    data['first_name'] = prompt_with_validation("Enter first name: ", validation.is_valid_first_name, "Only letters, 2-30 characters.")
+    data['last_name'] = prompt_with_validation("Enter last name: ", validation.is_valid_last_name, "Only letters, 2-30 characters.")
+    data['birthday'] = prompt_with_validation("Enter birthday (YYYY-MM-DD): ", validation.is_valid_iso_date, "Format must be YYYY-MM-DD.")
+    data['gender'] = prompt_with_validation("Enter gender (male/female): ", validation.is_valid_gender, "Must be 'male' or 'female'.", str.lower)
+    data['street_name'] = prompt_with_validation("Enter street name: ", validation.is_valid_street_name, "Letters and spaces, 2-50 characters.")
+    data['house_number'] = prompt_with_validation("Enter house number: ", validation.is_valid_house_number, "1-6 digits.")
+    data['zip_code'] = prompt_with_validation("Enter zip code (e.g., 1234AB): ", validation.is_valid_zip_code, "Format must be DDDDXX.", str.upper)
+    
     print("--- Predefined Cities ---")
     for i, city in enumerate(config.PREDEFINED_CITIES, 1):
         print(f"{i}. {city}")
-    try:
-        city_choice = int(input("Choose a city (number): "))
-        if 1 <= city_choice <= len(config.PREDEFINED_CITIES):
-            data['city'] = config.PREDEFINED_CITIES[city_choice - 1]
-        else:
-            print("Invalid city choice.")
-            return None
-    except ValueError:
-        print("Invalid input. Please enter a number.")
-        return None
-    data['email'] = input("Enter email address: ")
-    data['mobile_phone'] = input("Enter 8-digit mobile number (e.g., 12345678): ")
-    data['driving_license_number'] = input("Enter driving license (e.g., AB1234567): ").upper()
+    
+    city_choice = prompt_for_int("Choose a city (number): ", 1, len(config.PREDEFINED_CITIES))
+    data['city'] = config.PREDEFINED_CITIES[city_choice - 1]
+
+    data['email'] = prompt_with_validation("Enter email address: ", validation.is_valid_email, "Standard email format (e.g., user@example.com).")
+    data['mobile_phone'] = prompt_with_validation("Enter 8-digit mobile number (e.g., 12345678): ", validation.is_valid_phone_digits, "8 digits required.")
+    data['driving_license_number'] = prompt_with_validation("Enter driving license (e.g., AB1234567): ", validation.is_valid_driving_license, "XXDDDDDDD or XDDDDDDDD.", str.upper)
     return data
 
 def print_scooter_syntax_rules():
@@ -146,67 +205,115 @@ Scooter Data Attribute Syntax Rules:
 """)
 
 def prompt_for_new_scooter():
-    """Gets data for a new scooter from the console."""
+    """Gets data for a new scooter from the console with immediate validation."""
     print_header("Add New Scooter")
     print_scooter_syntax_rules()
     data = {}
-    try:
-        data['serial_number'] = input("Enter serial number (10-17 alphanumeric): ")
-        data['brand'] = input("Enter brand: ")
-        data['model'] = input("Enter model: ")
-        data['top_speed'] = float(input("Enter top speed (km/h): "))
-        data['battery_capacity'] = float(input("Enter battery capacity (Wh): "))
-        data['state_of_charge'] = float(input("Enter initial State of Charge (%): "))
-        data['target_range_soc_min'] = float(input("Enter Target SoC Min (%): "))
-        data['target_range_soc_max'] = float(input("Enter Target SoC Max (%): "))
-        data['location_lat'] = input("Enter initial latitude (e.g., 51.9225): ")  # Changed to str
-        data['location_lon'] = input("Enter initial longitude (e.g., 4.47917): ")  # Changed to str
-        data['mileage'] = float(input("Enter initial mileage (km): "))
-        data['last_maintenance_date'] = input("Enter last maintenance date (YYYY-MM-DD): ")
-        return data
-    except ValueError:
-        print("Invalid input. Please enter numbers for numeric fields.")
-        return None
+
+    data['serial_number'] = prompt_with_validation(
+        "Enter serial number (10-17 alphanumeric): ",
+        validation.is_valid_scooter_serial,
+        "Must be 10 to 17 alphanumeric characters."
+    )
+    data['brand'] = input("Enter brand: ")
+    data['model'] = input("Enter model: ")
+    data['top_speed'] = prompt_for_float("Enter top speed (km/h): ", min_val=0)
+    data['battery_capacity'] = prompt_for_float("Enter battery capacity (Wh): ", min_val=0)
+    data['state_of_charge'] = prompt_for_float("Enter initial State of Charge (%): ", min_val=0, max_val=100)
+    
+    while True:
+        min_soc = prompt_for_float("Enter Target SoC Min (%): ", min_val=0, max_val=100)
+        max_soc = prompt_for_float(f"Enter Target SoC Max (%): ", min_val=min_soc, max_val=100)
+        if max_soc >= min_soc:
+            data['target_range_soc_min'] = min_soc
+            data['target_range_soc_max'] = max_soc
+            break
+        else:
+            print("Max SoC cannot be less than Min SoC.")
+
+    data['location_lat'] = prompt_with_validation(
+        "Enter initial latitude (e.g., 51.92250): ",
+        validation.is_valid_location_coordinate,
+        "Must be a valid coordinate with at least 5 decimal places."
+    )
+    data['location_lon'] = prompt_with_validation(
+        "Enter initial longitude (e.g., 4.47917): ",
+        validation.is_valid_location_coordinate,
+        "Must be a valid coordinate with at least 5 decimal places."
+    )
+    data['mileage'] = prompt_for_float("Enter initial mileage (km): ", min_val=0)
+    data['last_maintenance_date'] = prompt_with_validation(
+        "Enter last maintenance date (YYYY-MM-DD): ",
+        validation.is_valid_iso_date,
+        "Format must be YYYY-MM-DD."
+    )
+    return data
 
 def prompt_for_scooter_update(current_user: models.User):
-    """Gets data for updating a scooter."""
+    """Gets data for updating a scooter with immediate validation."""
     print_header("Update Scooter Details")
-    print_scooter_syntax_rules()
-    try:
-        scooter_id = int(input("Enter Scooter ID to update: "))
-        print("Enter new data. Press Enter to skip a field.")
-        
-        update_data = {}
-        
-        # All fields for admins
-        if current_user.role in [config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN]:
-            fields = ['brand', 'model', 'serial_number', 'top_speed', 'battery_capacity', 'state_of_charge', 'target_range_soc_min', 'target_range_soc_max', 'location_lat', 'location_lon', 'out_of_service_status', 'mileage', 'last_maintenance_date']
-        # Limited fields for service engineer
-        else:
-            fields = ['state_of_charge', 'target_range_soc_min', 'target_range_soc_max', 'location_lat', 'location_lon', 'out_of_service_status', 'mileage', 'last_maintenance_date']
-
-        for field in fields:
-            value = input(f"New {field.replace('_', ' ')}: ")
-            if value:
-                # Basic type conversion
-                if field in ['top_speed', 'battery_capacity', 'state_of_charge', 'target_range_soc_min', 'target_range_soc_max', 'mileage']:
-                    update_data[field] = float(value)
-                elif field in ['location_lat', 'location_lon']:
-                    update_data[field] = value  # Keep as string
-                elif field in ['out_of_service_status']:
-                    update_data[field] = int(value)
-                else:
-                    update_data[field] = value
-        
-        if not update_data:
-            print("No changes specified.")
-            return None, None
-            
-        return scooter_id, update_data
-
-    except ValueError:
-        print("Invalid input. Please enter numbers where appropriate.")
+    
+    scooter_id = prompt_for_int("Enter Scooter ID to update: ")
+    if scooter_id is None:
         return None, None
+
+    print("Enter new data. Press Enter to skip a field.")
+    print_scooter_syntax_rules()
+    
+    update_data = {}
+    
+    # Define editable fields based on role
+    is_admin = current_user.role in [config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN]
+    
+    # --- Admin Fields ---
+    if is_admin:
+        brand = input("New brand: ")
+        if brand: update_data['brand'] = brand
+        
+        model = input("New model: ")
+        if model: update_data['model'] = model
+
+        serial = prompt_with_validation("New serial_number: ", validation.is_valid_scooter_serial, "Must be 10-17 alphanumeric.", optional=True)
+        if serial: update_data['serial_number'] = serial
+
+        top_speed = prompt_for_float("New top_speed: ", min_val=0, optional=True)
+        if top_speed is not None: update_data['top_speed'] = top_speed
+
+        battery_capacity = prompt_for_float("New battery_capacity: ", min_val=0, optional=True)
+        if battery_capacity is not None: update_data['battery_capacity'] = battery_capacity
+
+    # --- Shared Fields ---
+    soc = prompt_for_float("New state_of_charge: ", min_val=0, max_val=100, optional=True)
+    if soc is not None: update_data['state_of_charge'] = soc
+
+    min_soc = prompt_for_float("New target_range_soc_min: ", min_val=0, max_val=100, optional=True)
+    if min_soc is not None: update_data['target_range_soc_min'] = min_soc
+    
+    # Ensure max_soc is >= min_soc if both are updated
+    max_soc_min = update_data.get('target_range_soc_min', 0)
+    max_soc = prompt_for_float(f"New target_range_soc_max: ", min_val=max_soc_min, max_val=100, optional=True)
+    if max_soc is not None: update_data['target_range_soc_max'] = max_soc
+
+    lat = prompt_with_validation("New location_lat: ", validation.is_valid_location_coordinate, "Must be a valid coordinate.", optional=True)
+    if lat: update_data['location_lat'] = lat
+
+    lon = prompt_with_validation("New location_lon: ", validation.is_valid_location_coordinate, "Must be a valid coordinate.", optional=True)
+    if lon: update_data['location_lon'] = lon
+
+    status = prompt_for_int("New out_of_service_status (0 or 1): ", min_val=0, max_val=1, optional=True)
+    if status is not None: update_data['out_of_service_status'] = status
+
+    mileage = prompt_for_float("New mileage: ", min_val=0, optional=True)
+    if mileage is not None: update_data['mileage'] = mileage
+
+    maint_date = prompt_with_validation("New last_maintenance_date (YYYY-MM-DD): ", validation.is_valid_iso_date, "Format must be YYYY-MM-DD.", optional=True)
+    if maint_date: update_data['last_maintenance_date'] = maint_date
+            
+    if not update_data:
+        print("No changes specified.")
+        return None, None
+            
+    return scooter_id, update_data
 
 # --- Handler Functions for Menu Choices ---
 

@@ -296,12 +296,31 @@ def add_new_scooter(current_user: models.User, serial_number: str, brand: str, m
         return False
 
     try:
+        scooter_data = {
+            'serial_number': serial_number, 'brand': brand, 'model': model,
+            'top_speed': top_speed, 'battery_capacity': battery_capacity,
+            'state_of_charge': state_of_charge, 'target_range_soc_min': target_range_soc_min,
+            'target_range_soc_max': target_range_soc_max, 'location_lat': location_lat,
+            'location_lon': location_lon, 'mileage': mileage,
+            'last_maintenance_date': last_maintenance_date,
+            'out_of_service_status': out_of_service_status
+        }
+        encrypted_data = {key: encryption_manager.encrypt(str(value)) for key, value in scooter_data.items()}
+
         conn = database.get_db_connection()
         cursor = conn.cursor()
         in_service_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute(
             "INSERT INTO scooters (serial_number, brand, model, in_service_date, top_speed, battery_capacity, state_of_charge, target_range_soc_min, target_range_soc_max, location_lat, location_lon, out_of_service_status, mileage, last_maintenance_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (serial_number, brand, model, in_service_date, top_speed, battery_capacity, state_of_charge, target_range_soc_min, target_range_soc_max, location_lat, location_lon, out_of_service_status, mileage, last_maintenance_date)
+            (
+                encrypted_data['serial_number'], encrypted_data['brand'], encrypted_data['model'],
+                in_service_date, encrypted_data.get('top_speed'),
+                encrypted_data.get('battery_capacity'), encrypted_data.get('state_of_charge'),
+                encrypted_data.get('target_range_soc_min'), encrypted_data.get('target_range_soc_max'),
+                encrypted_data.get('location_lat'), encrypted_data.get('location_lon'),
+                encrypted_data.get('out_of_service_status'),
+                encrypted_data.get('mileage'), encrypted_data.get('last_maintenance_date')
+            )
         )
         conn.commit()
         secure_logger.log(current_user.username, "Added new scooter", f"Serial: {serial_number}")
@@ -352,10 +371,12 @@ def update_scooter(current_user: models.User, scooter_id: int, updates: dict):
         print("No valid fields to update or all updates were unauthorized.")
         return False
 
+    encrypted_updates = {key: encryption_manager.encrypt(str(value)) for key, value in allowed_updates.items()}
+
     # Construct the SQL query dynamically
-    set_clause = ", ".join([f"{key} = ?" for key in allowed_updates.keys()])
+    set_clause = ", ".join([f"{key} = ?" for key in encrypted_updates.keys()])
     sql_query = f"UPDATE scooters SET {set_clause} WHERE id = ?"
-    params = list(allowed_updates.values()) + [scooter_id]
+    params = list(encrypted_updates.values()) + [scooter_id]
 
     try:
         conn = database.get_db_connection()
@@ -383,10 +404,33 @@ def delete_scooter(current_user: models.User, serial_number: str):
     try:
         conn = database.get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM scooters WHERE serial_number = ?", (serial_number,))
+        
+        # Fetch all scooters to find the one with the matching decrypted serial number
+        cursor.execute("SELECT id, serial_number FROM scooters")
+        all_scooters = cursor.fetchall()
+        
+        scooter_id_to_delete = None
+        for scooter_row in all_scooters:
+            try:
+                decrypted_serial = encryption_manager.decrypt(scooter_row['serial_number'])
+                if decrypted_serial.lower() == serial_number.lower():
+                    scooter_id_to_delete = scooter_row['id']
+                    break
+            except Exception:
+                # This can happen if a serial number is not valid encrypted data
+                continue
+        
+        if scooter_id_to_delete is None:
+            print(f"Error: Scooter with serial number '{serial_number}' not found.")
+            conn.close()
+            return False
+
+        cursor.execute("DELETE FROM scooters WHERE id = ?", (scooter_id_to_delete,))
 
         if cursor.rowcount == 0:
-            print(f"Error: Scooter with serial number '{serial_number}' not found.")
+            # This case should ideally not be reached if the ID was found
+            print(f"Error: Scooter with serial number '{serial_number}' not found during deletion.")
+            conn.close()
             return False
 
         conn.commit()
@@ -397,8 +441,47 @@ def delete_scooter(current_user: models.User, serial_number: str):
         print(f"An error occurred while deleting the scooter: {e}")
         return False
     finally:
-        if conn:
+        if 'conn' in locals() and conn:
             conn.close()
+
+
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN, config.ROLE_SERVICE_ENGINEER])
+def search_scooters(current_user: models.User, search_key: str):
+    """
+    Searches for scooters by a partial key.
+    NOTE: This is computationally expensive as it decrypts all records in memory.
+    """
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM scooters")
+    all_scooters = cursor.fetchall()
+    conn.close()
+
+    results = []
+    search_key_lower = search_key.lower()
+
+    searchable_fields = ['brand', 'model', 'serial_number']
+
+    for row in all_scooters:
+        # Decrypt all fields to make them searchable and readable
+        try:
+            decrypted_row = {key: (encryption_manager.decrypt(value) if isinstance(value, bytes) else value) for key, value in dict(row).items()}
+        except Exception:
+            # If decryption fails for a row, skip it or handle error
+            # For now, we just print a message and skip.
+            # print(f"Warning: Could not decrypt row {row['id']}, skipping.")
+            continue
+
+        match = False
+        for field in searchable_fields:
+            if field in decrypted_row and search_key_lower in str(decrypted_row[field]).lower():
+                match = True
+                break
+
+        if match:
+            results.append(decrypted_row)
+
+    return results
 
 
 # ---  Services ---
