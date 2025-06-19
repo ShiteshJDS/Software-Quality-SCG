@@ -819,7 +819,7 @@ def um_members():
             # After the menu function returns (on logout), reset user and loop to login
             current_user = None
 
-if __name__ == "__um_members__":
+if __name__ == "__main__":
     try:
         um_members()
     except KeyboardInterrupt:

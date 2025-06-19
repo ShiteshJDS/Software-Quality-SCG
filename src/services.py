@@ -789,7 +789,7 @@ def delete_traveller(current_user: models.User, traveller_id: int):
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def create_backup(current_user: models.User):
     """Creates a timestamped zip archive of the database."""
-    backup_dir = "backups"
+    backup_dir = os.path.join("src", "backups")
     os.makedirs(backup_dir, exist_ok=True)
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -884,7 +884,7 @@ def revoke_restore_code(current_user: models.User, code_to_revoke: str):
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def restore_from_backup(current_user: models.User, backup_filename: str, restore_code: str = None):
     """Restores the database from a backup zip file."""
-    backup_filepath = os.path.join("backups", backup_filename)
+    backup_filepath = os.path.join("src", "backups", backup_filename)
     if not os.path.exists(backup_filepath):
         print("Error: Backup file not found.")
         return False
