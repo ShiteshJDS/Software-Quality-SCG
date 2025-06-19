@@ -3,11 +3,13 @@
 import bcrypt
 import getpass # Dit is een standaard-python library: zorgt ervoor dat de wachtwoord niet vertoont wordt tijdens het invullen
 import time
-import config, services, models
+import config, services, models, database
+from encryption import EncryptionManager
 
 # In-memory dictionary to track login attempts.
 # In a real-world application, this should be a more persistent store like Redis or a database table.
 login_attempts = {}
+encryption_manager = EncryptionManager(config.ENCRYPTION_KEY_FILE)
 
 def hash_password(password: str) -> str:
     """Hashes a password using bcrypt."""
@@ -22,6 +24,16 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
     password_hash_bytes = password_hash.encode('utf-8')
     return bcrypt.checkpw(plain_password_bytes, password_hash_bytes)
 
+def decrypt_user_row(user_row):
+    """Helper function to decrypt a user row from the database."""
+    return models.User(
+        id=user_row['id'],
+        username=encryption_manager.decrypt(user_row['username']),
+        role=user_row['role'],
+        first_name=encryption_manager.decrypt(user_row['first_name']),
+        last_name=encryption_manager.decrypt(user_row['last_name']),
+        registration_date=user_row['registration_date']
+    )
 
 def login() -> models.User | None:
     """
@@ -65,14 +77,7 @@ def login() -> models.User | None:
                 if username.lower() in login_attempts:
                     del login_attempts[username.lower()]
 
-                logged_in_user = models.User(
-                    id=user_row['id'],
-                    username=decrypted_username,
-                    role=user_row['role'],
-                    first_name=services.encryption_manager.decrypt(user_row['first_name']),
-                    last_name=services.encryption_manager.decrypt(user_row['last_name']),
-                    registration_date=user_row['registration_date']
-                )
+                logged_in_user = decrypt_user_row(user_row)
 
                 # --- NEW: Check for unread suspicious logs for admins ---
                 if logged_in_user.role in [config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN]:
@@ -84,17 +89,30 @@ def login() -> models.User | None:
                 break
 
     # --- Handle Failed Login ---
+    # If we get here, it means either the user wasn't found or the password was incorrect.
+    # We need to increment the failure count for the attempted username.
+    if username.lower() in login_attempts:
+        attempts, _ = login_attempts[username.lower()]
+        login_attempts[username.lower()] = (attempts + 1, time.time())
+    else:
+        login_attempts[username.lower()] = (1, time.time())
+
     print("Invalid username or password.")
-    
-    # Log a failed attempt
-    log_message = "Wrong password" if user_found else "Username not found"
-    services.secure_logger.log(username, "Unsuccessful login", log_message, is_suspicious=True)
+    return None
 
-    # Update failed login attempts
-    attempts, _ = login_attempts.get(username.lower(), (0, 0))
-    login_attempts[username.lower()] = (attempts + 1, time.time())
-    
-    if attempts + 1 >= config.MAX_LOGIN_ATTEMPTS:
-        print(f"Account locked for {config.LOCKOUT_TIME_SECONDS / 60:.0f} minutes due to multiple failed attempts.")
+def get_user_by_username(username: str) -> models.User | None:
+    """Finds a user by their plaintext username and returns a User object."""
+    conn = database.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users")
+    all_users = cursor.fetchall()
+    conn.close()
 
+    for user_row in all_users:
+        try:
+            decrypted_username = encryption_manager.decrypt(user_row['username'])
+            if decrypted_username.lower() == username.lower():
+                return decrypt_user_row(user_row)
+        except Exception:
+            continue
     return None

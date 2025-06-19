@@ -371,6 +371,110 @@ def handle_update_own_password(current_user: models.User):
         return
     services.update_own_password(current_user, old_password, new_password)
 
+def handle_list_users(current_user: models.User):
+    """Handles listing users."""
+    print_header("List Users")
+    users = services.list_users(current_user)
+    if users:
+        # Exclude password field from being displayed
+        display_results([{"id": u.id, "username": u.username, "role": u.role, "first_name": u.first_name, "last_name": u.last_name, "registration_date": u.registration_date} for u in users])
+
+def prompt_for_user_update(current_user: models.User):
+    """Gets data for updating a user."""
+    print_header("Update User Profile")
+    username = input("Enter username of the user to update: ")
+    
+    # Prevent users from updating users with higher or equal roles
+    target_user = auth.get_user_by_username(username)
+    if not target_user:
+        print("User not found.")
+        return None, None
+    
+    if current_user.role == config.ROLE_SYSTEM_ADMIN and target_user.role != config.ROLE_SERVICE_ENGINEER:
+        print("System Admins can only update Service Engineers.")
+        return None, None
+
+    print("Enter new data. Press Enter to skip a field.")
+    first_name = input(f"New first name (current: {target_user.first_name}): ")
+    last_name = input(f"New last name (current: {target_user.last_name}): ")
+    
+    update_data = {}
+    if first_name:
+        update_data['first_name'] = first_name
+    if last_name:
+        update_data['last_name'] = last_name
+    
+    if not update_data:
+        print("No changes specified.")
+        return None, None
+
+    return username, update_data
+
+def handle_delete_user(current_user: models.User):
+    """Handles deleting a user."""
+    print_header("Delete User")
+    username = input("Enter username of the user to delete: ")
+    
+    # Prevent users from deleting users with higher or equal roles
+    target_user = auth.get_user_by_username(username)
+    if not target_user:
+        print("User not found.")
+        return
+
+    if current_user.role == config.ROLE_SYSTEM_ADMIN and target_user.role != config.ROLE_SERVICE_ENGINEER:
+        print("System Admins can only delete Service Engineers.")
+        return
+        
+    if username.lower() == current_user.username.lower():
+        print("You cannot delete your own account from this menu. Use the 'Delete My Account' option.")
+        return
+
+    confirm = input(f"Are you sure you want to delete the user '{username}'? This cannot be undone. (yes/no): ")
+    if confirm.lower() == 'yes':
+        services.delete_user(current_user, username)
+    else:
+        print("User deletion cancelled.")
+
+def handle_update_own_profile(current_user: models.User):
+    """Handles updating own user profile."""
+    print_header("Update My Profile")
+    print("Enter new data. Press Enter to skip a field.")
+    first_name = input(f"New first name (current: {current_user.first_name}): ")
+    last_name = input(f"New last name (current: {current_user.last_name}): ")
+    
+    update_data = {}
+    if first_name:
+        update_data['first_name'] = first_name
+    if last_name:
+        update_data['last_name'] = last_name
+    
+    if not update_data:
+        print("No changes specified.")
+        return
+
+    services.update_own_profile(current_user, update_data)
+
+def handle_delete_own_account(current_user: models.User):
+    """Handles deleting own account and returns True if logout should occur."""
+    print_header("Delete My Account")
+    
+    # Super Admin cannot be deleted
+    if current_user.role == config.ROLE_SUPER_ADMIN:
+        print("The Super Admin account cannot be deleted.")
+        return False
+
+    confirm = input("Are you sure you want to permanently delete your own account? This cannot be undone. (yes/no): ")
+    if confirm.lower() == 'yes':
+        if services.delete_own_account(current_user):
+            print("Account deleted successfully. You will be logged out.")
+            return True  # Signal to logout
+        else:
+            # Error message already printed by service
+            return False
+    else:
+        print("Account deletion cancelled.")
+        return False
+
 # --- Role-Specific Menus ---
 
 def show_service_engineer_menu(current_user: models.User):
@@ -409,45 +513,47 @@ def show_super_admin_menu(current_user: models.User):
     while True:
         print_header(f"Super Admin Menu | Logged in as: {current_user.username}")
         print("\n--- Traveller Management ---")
-        print("1. Add New Traveller - Register a new traveller with all required personal and contact details.")
-        print("2. Search for Traveller - Find travellers by any information (name, email, etc.).")
-        print("3. Update Traveller - Modify details of an existing traveller.")
-        print("4. Delete Traveller - Remove a traveller from the system.")
+        print("1. Add New Traveller")
+        print("2. Search for Traveller")
+        print("3. Update Traveller")
+        print("4. Delete Traveller")
 
         print("\n--- Scooter Management ---")
-        print("5. Add New Scooter - Register a new scooter with technical and location details.")
-        print("6. Update Scooter Details - Change information or status of a scooter.")
-        print("7. Delete Scooter - Remove a scooter from the fleet.")
-        print("8. Search for Scooter - Find scooters by brand, model, or serial number.")
+        print("5. Add New Scooter")
+        print("6. Update Scooter Details")
+        print("7. Delete Scooter")
+        print("8. Search for Scooter")
 
         print("\n--- User Management ---")
-        print("9. Add New User (Service Engineer) - Create a new Service Engineer account.")
-        print("10. Reset User Password - Reset the password for an existing user.")
-        print("11. Add New User (System Admin or Service Engineer) - Create a new System Admin or Service Engineer account.")
+        print("9. Add New User (SysAdmin/SvcEng)")
+        print("10. Update User Profile")
+        print("11. Delete User")
+        print("12. Reset User Password")
+        print("13. List Users")
 
         print("\n--- System & Self-Service ---")
-        print("12. View System Logs - Display recent system logs and mark suspicious logs as read.")
-        print("13. Create Backup - Generate a backup of the system database.")
-        print("14. Restore From Backup - Restore the system from a backup file.")
-        print("15. Generate Restore Code for System Admin - Generate a one-time restore code for a System Admin user.")
-        print("16. Revoke Restore Code for System Admin - Revoke an active, unused restore code.")
-        print("17. Logout - Log out of the system and return to the login screen.")
+        print("14. View System Logs")
+        print("15. Create Backup")
+        print("16. Restore From Backup")
+        print("17. Generate Restore Code for System Admin")
+        print("18. Revoke Restore Code for System Admin")
+        print("19. Logout")
 
         choice = input("Enter your choice: ")
-        # Map new numbers to old logic
+        
         if choice == '1':
             traveller_data = prompt_for_new_traveller()
             if traveller_data:
                 services.add_new_traveller(current_user, **traveller_data)
         elif choice == '2':
-            print_traveller_syntax_rules()
             key = input("Enter search key (any traveller info): ")
             results = services.search_travellers(current_user, key)
             display_results(results)
         elif choice == '3':
             try:
                 trav_id = int(input("Enter Traveller ID to update: "))
-                new_data = prompt_for_new_traveller()
+                # Fetching all data again, can be optimized later
+                new_data = prompt_for_new_traveller() 
                 if new_data:
                     services.update_traveller(current_user, trav_id, new_data)
             except ValueError:
@@ -473,7 +579,6 @@ def show_super_admin_menu(current_user: models.User):
             except ValueError:
                 print("Invalid ID.")
         elif choice == '8':
-            print_scooter_syntax_rules()
             key = input("Enter search key (brand, model, or serial number): ")
             results = services.search_scooters(current_user, key)
             display_results(results)
@@ -482,71 +587,79 @@ def show_super_admin_menu(current_user: models.User):
             if user_data:
                 services.add_new_user(current_user, **user_data)
         elif choice == '10':
-            print_user_syntax_rules()
+            username, update_data = prompt_for_user_update(current_user)
+            if username and update_data:
+                services.update_user_profile(current_user, username, update_data)
+        elif choice == '11':
+            handle_delete_user(current_user)
+        elif choice == '12':
             target_user = input("Enter username to reset password for: ")
             services.reset_user_password(current_user, target_user)
-        elif choice == '11':
-            user_data = prompt_for_new_user(current_user.role)
-            if user_data:
-                services.add_new_user(current_user, **user_data)
-        elif choice == '12':
-            handle_view_logs(current_user)
         elif choice == '13':
-            services.create_backup(current_user)
+            handle_list_users(current_user)
         elif choice == '14':
-            filename = input("Enter backup filename (e.g., backup_20250617_103000.zip): ")
-            code = input("Enter one-time restore code (press Enter if not required): ")
-            services.restore_from_backup(current_user, filename, code or None)
+            handle_view_logs(current_user)
         elif choice == '15':
+            services.create_backup(current_user)
+        elif choice == '16':
+            filename = input("Enter backup filename (e.g., backup_20250617_103000.zip): ")
+            # Super admin does not need a code for restore
+            services.restore_from_backup(current_user, filename, restore_code=None)
+        elif choice == '17':
             target_user = input("Enter System Admin username to generate code for: ")
             backup_file = input("Enter the exact backup filename the code is for: ")
             services.generate_restore_code(current_user, target_user, backup_file)
-        elif choice == '16':
+        elif choice == '18':
             code_to_revoke = input("Enter the exact restore code to revoke: ")
             if code_to_revoke:
                 services.revoke_restore_code(current_user, code_to_revoke)
-        elif choice == '17':
+        elif choice == '19':
             print("Logging out...")
             services.secure_logger.log(current_user.username, "Logged out")
             break
         else:
             print("Invalid choice. Please try again.")
 
+
 def show_system_admin_menu(current_user: models.User):
     """Displays the menu for System Administrators."""
     while True:
         print_header(f"System Admin Menu | Logged in as: {current_user.username}")
         print("\n--- Traveller Management ---")
-        print("1. Add New Traveller - Register a new traveller with all required personal and contact details.")
-        print("2. Search for Traveller - Find travellers by any information (name, email, etc.).")
-        print("3. Update Traveller - Modify details of an existing traveller.")
-        print("4. Delete Traveller - Remove a traveller from the system.")
+        print("1. Add New Traveller")
+        print("2. Search for Traveller")
+        print("3. Update Traveller")
+        print("4. Delete Traveller")
 
         print("\n--- Scooter Management ---")
-        print("5. Add New Scooter - Register a new scooter with technical and location details.")
-        print("6. Update Scooter Details - Change information or status of a scooter.")
-        print("7. Delete Scooter - Remove a scooter from the fleet.")
-        print("8. Search for Scooter - Find scooters by brand, model, or serial number.")
+        print("5. Add New Scooter")
+        print("6. Update Scooter Details")
+        print("7. Delete Scooter")
+        print("8. Search for Scooter")
 
-        print("\n--- User Management ---")
-        print("9. Add New User (Service Engineer) - Create a new Service Engineer account.")
-        print("10. Reset User Password - Reset the password for an existing user.")
+        print("\n--- User Management (Service Engineers) ---")
+        print("9. Add New Service Engineer")
+        print("10. Update Service Engineer Profile")
+        print("11. Delete Service Engineer")
+        print("12. Reset Service Engineer Password")
+        print("13. List All Users")
 
         print("\n--- System & Self-Service ---")
-        print("11. View System Logs - Display recent system logs and mark suspicious logs as read.")
-        print("12. Create Backup - Generate a backup of the system database.")
-        print("13. Restore From Backup - Restore the system from a backup file.")
-        print("14. Update My Password - Change your own account password.")
-        print("15. Logout - Log out of the system and return to the login screen.")
+        print("14. View System Logs")
+        print("15. Create Backup")
+        print("16. Restore From Backup")
+        print("17. Update My Password")
+        print("18. Update My Profile")
+        print("19. Delete My Account")
+        print("20. Logout")
 
         choice = input("Enter your choice: ")
-        # Map new numbers to old logic
+        
         if choice == '1':
             traveller_data = prompt_for_new_traveller()
             if traveller_data:
                 services.add_new_traveller(current_user, **traveller_data)
         elif choice == '2':
-            print_traveller_syntax_rules()
             key = input("Enter search key (any traveller info): ")
             results = services.search_travellers(current_user, key)
             display_results(results)
@@ -579,29 +692,42 @@ def show_system_admin_menu(current_user: models.User):
             except ValueError:
                 print("Invalid ID.")
         elif choice == '8':
-            print_scooter_syntax_rules()
             key = input("Enter search key (brand, model, or serial number): ")
             results = services.search_scooters(current_user, key)
             display_results(results)
         elif choice == '9':
             user_data = prompt_for_new_user(current_user.role)
-            if user_data:
+            if user_data and user_data.get('role') == config.ROLE_SERVICE_ENGINEER:
                 services.add_new_user(current_user, **user_data)
+            elif user_data:
+                print("System Admins can only create Service Engineer accounts.")
         elif choice == '10':
-            print_user_syntax_rules()
-            target_user = input("Enter username to reset password for: ")
-            services.reset_user_password(current_user, target_user)
+            username, update_data = prompt_for_user_update(current_user)
+            if username and update_data:
+                services.update_user_profile(current_user, username, update_data)
         elif choice == '11':
-            handle_view_logs(current_user)
+            handle_delete_user(current_user)
         elif choice == '12':
-            services.create_backup(current_user)
+            target_user = input("Enter Service Engineer username to reset password for: ")
+            services.reset_user_password(current_user, target_user)
         elif choice == '13':
-            filename = input("Enter backup filename (e.g., backup_20250617_103000.zip): ")
-            code = input("Enter one-time restore code (press Enter if not required): ")
-            services.restore_from_backup(current_user, filename, code or None)
+            handle_list_users(current_user)
         elif choice == '14':
-            handle_update_own_password(current_user)
+            handle_view_logs(current_user)
         elif choice == '15':
+            services.create_backup(current_user)
+        elif choice == '16':
+            filename = input("Enter backup filename (e.g., backup_20250617_103000.zip): ")
+            code = input("Enter one-time restore code: ")
+            services.restore_from_backup(current_user, filename, code)
+        elif choice == '17':
+            handle_update_own_password(current_user)
+        elif choice == '18':
+            handle_update_own_profile(current_user)
+        elif choice == '19':
+            if handle_delete_own_account(current_user):
+                break  # Logout if account was deleted
+        elif choice == '20':
             print("Logging out...")
             services.secure_logger.log(current_user.username, "Logged out")
             break

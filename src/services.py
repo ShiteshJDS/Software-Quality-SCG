@@ -277,6 +277,91 @@ def update_own_password(current_user: models.User, old_password: str, new_passwo
     print("Password updated successfully.")
     return True
 
+@requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
+def list_users(current_user: models.User) -> list[models.User]:
+    """Retrieves a list of all users with decrypted information."""
+    try:
+        all_user_rows = get_all_users_raw()
+        decrypted_users = []
+        for user_row in all_user_rows:
+            try:
+                decrypted_users.append(auth.decrypt_user_row(user_row))
+            except Exception:
+                # Log or handle users whose data cannot be decrypted
+                continue
+        secure_logger.log(current_user.username, "Listed all users")
+        return decrypted_users
+    except Exception as e:
+        print(f"An error occurred while listing users: {e}")
+        return []
+
+@requires_role([config.ROLE_SYSTEM_ADMIN, config.ROLE_SERVICE_ENGINEER])
+def update_own_profile(current_user: models.User, new_profile_data: dict):
+    """Allows a user to update their own first and last name."""
+    if not new_profile_data or not any(new_profile_data.values()):
+        print("No new data provided for update.")
+        return False
+
+    update_fields = {}
+    if 'first_name' in new_profile_data and new_profile_data['first_name']:
+        update_fields['first_name'] = encryption_manager.encrypt(new_profile_data['first_name'])
+    if 'last_name' in new_profile_data and new_profile_data['last_name']:
+        update_fields['last_name'] = encryption_manager.encrypt(new_profile_data['last_name'])
+
+    if not update_fields:
+        print("No valid fields to update.")
+        return False
+
+    set_clause = ", ".join([f"{key} = ?" for key in update_fields.keys()])
+    params = list(update_fields.values()) + [current_user.id]
+
+    try:
+        conn = database.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"UPDATE users SET {set_clause} WHERE id = ?", tuple(params))
+        conn.commit()
+        secure_logger.log(current_user.username, "Updated own profile", f"Fields updated: {list(update_fields.keys())}")
+        print("Profile updated successfully.")
+        # Update the current_user object in memory
+        if 'first_name' in new_profile_data:
+            current_user.first_name = new_profile_data['first_name']
+        if 'last_name' in new_profile_data:
+            current_user.last_name = new_profile_data['last_name']
+        return True
+    except Exception as e:
+        print(f"An error occurred while updating your profile: {e}")
+        return False
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
+
+@requires_role([config.ROLE_SYSTEM_ADMIN]) # Service Engineers cannot delete their own account as per spec
+def delete_own_account(current_user: models.User):
+    """Allows a System Admin to delete their own account."""
+    # Super Admins cannot be deleted
+    if current_user.role == config.ROLE_SUPER_ADMIN:
+        print("Error: The Super Admin account cannot be deleted.")
+        return False
+
+    try:
+        conn = database.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users WHERE id = ?", (current_user.id,))
+        conn.commit()
+
+        if cursor.rowcount > 0:
+            secure_logger.log(current_user.username, "Deleted own account", f"Username: {current_user.username}", is_suspicious=True)
+            return True
+        else:
+            print("Error: Could not delete your account. Please contact support.")
+            return False
+    except Exception as e:
+        print(f"An error occurred while deleting your account: {e}")
+        return False
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
+
 # --- Scooter Services ---
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
@@ -423,43 +508,39 @@ def update_scooter(current_user: models.User, scooter_id: int, updates: dict):
             conn.close()
 
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
-def delete_scooter(current_user: models.User, serial_number: str):
-    """Deletes a scooter from the system."""
+def delete_scooter(current_user: models.User, scooter_id: int):
+    """Deletes a scooter from the system by its ID."""
     try:
         conn = database.get_db_connection()
         cursor = conn.cursor()
-        
-        # Fetch all scooters to find the one with the matching decrypted serial number
-        cursor.execute("SELECT id, serial_number FROM scooters")
-        all_scooters = cursor.fetchall()
-        
-        scooter_id_to_delete = None
-        for scooter_row in all_scooters:
-            try:
-                decrypted_serial = encryption_manager.decrypt(scooter_row['serial_number'])
-                if decrypted_serial.lower() == serial_number.lower():
-                    scooter_id_to_delete = scooter_row['id']
-                    break
-            except Exception:
-                # This can happen if a serial number is not valid encrypted data
-                continue
-        
-        if scooter_id_to_delete is None:
-            print(f"Error: Scooter with serial number '{serial_number}' not found.")
+
+        # First, fetch the serial number for logging purposes before deleting.
+        cursor.execute("SELECT serial_number FROM scooters WHERE id = ?", (scooter_id,))
+        scooter_row = cursor.fetchone()
+
+        if scooter_row is None:
+            print(f"Error: Scooter with ID '{scooter_id}' not found.")
             conn.close()
             return False
+        
+        serial_number_for_log = f"ID: {scooter_id}"
+        try:
+            # Decrypt for logging, but don't fail if it's not possible
+            serial_number_for_log = encryption_manager.decrypt(scooter_row['serial_number'])
+        except Exception:
+            pass 
 
-        cursor.execute("DELETE FROM scooters WHERE id = ?", (scooter_id_to_delete,))
+        cursor.execute("DELETE FROM scooters WHERE id = ?", (scooter_id,))
 
         if cursor.rowcount == 0:
-            # This case should ideally not be reached if the ID was found
-            print(f"Error: Scooter with serial number '{serial_number}' not found during deletion.")
+            # This case should not be reached if the previous SELECT worked, but as a safeguard:
+            print(f"Error: Scooter with ID '{scooter_id}' not found during deletion.")
             conn.close()
             return False
 
         conn.commit()
-        secure_logger.log(current_user.username, "Deleted scooter", f"Serial: {serial_number}", is_suspicious=True)
-        print(f"Scooter '{serial_number}' deleted successfully.")
+        secure_logger.log(current_user.username, "Deleted scooter", f"Scooter ID: {scooter_id}, Serial: {serial_number_for_log}", is_suspicious=True)
+        print(f"Scooter with ID '{scooter_id}' deleted successfully.")
         return True
     except Exception as e:
         print(f"An error occurred while deleting the scooter: {e}")
@@ -515,11 +596,6 @@ def add_new_traveller(current_user: models.User, first_name, last_name, birthday
                    gender, street_name, house_number, zip_code, city, email, 
                    mobile_phone, driving_license_number):
     """Adds a new traveller to the database after validation and encryption."""
-    # Predefined city list
-    allowed_cities = [
-        "Amsterdam", "Rotterdam", "Utrecht", "Eindhoven", "Groningen",
-        "Maastricht", "Haarlem", "Leiden", "Nijmegen", "Zwolle"
-    ]
     # Validate all fields
     if not validation.is_valid_first_name(first_name):
         print("Invalid First Name. Only letters, 2-30 characters.")
@@ -542,8 +618,8 @@ def add_new_traveller(current_user: models.User, first_name, last_name, birthday
     if not validation.is_valid_zip_code(zip_code):
         print("Invalid Zip Code format. DDDDXX (e.g., 1234AB).")
         return False
-    if city not in allowed_cities:
-        print(f"Invalid City. Must be one of: {', '.join(allowed_cities)}")
+    if city not in config.PREDEFINED_CITIES:
+        print(f"Invalid City. Must be one of: {', '.join(config.PREDEFINED_CITIES)}")
         return False
     if not validation.is_valid_email(email):
         print("Invalid Email Address format.")
@@ -630,10 +706,6 @@ def search_travellers(current_user: models.User, search_key: str):
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def update_traveller(current_user: models.User, traveller_id: int, new_data: dict):
     """Updates an existing traveller's information."""
-    allowed_cities = [
-        "Amsterdam", "Rotterdam", "Utrecht", "Eindhoven", "Groningen",
-        "Maastricht", "Haarlem", "Leiden", "Nijmegen", "Zwolle"
-    ]
     # Validate fields if present in update
     if 'first_name' in new_data and not validation.is_valid_first_name(new_data['first_name']):
         print("Invalid First Name. Only letters, 2-30 characters.")
@@ -656,8 +728,8 @@ def update_traveller(current_user: models.User, traveller_id: int, new_data: dic
     if 'zip_code' in new_data and not validation.is_valid_zip_code(new_data['zip_code']):
         print("Invalid Zip Code format. DDDDXX (e.g., 1234AB).")
         return False
-    if 'city' in new_data and new_data['city'] not in allowed_cities:
-        print(f"Invalid City. Must be one of: {', '.join(allowed_cities)}")
+    if 'city' in new_data and new_data['city'] not in config.PREDEFINED_CITIES:
+        print(f"Invalid City. Must be one of: {', '.join(config.PREDEFINED_CITIES)}")
         return False
     if 'email' in new_data and not validation.is_valid_email(new_data['email']):
         print("Invalid Email Address format.")
