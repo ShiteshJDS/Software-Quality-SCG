@@ -528,7 +528,7 @@ def add_new_traveller(current_user: models.User, first_name, last_name, birthday
         print("Invalid Last Name. Only letters, 2-30 characters.")
         return False
     if not validation.is_valid_iso_date(birthday):
-        print("Invalid Birthday. Format must be YYYY-MM-DD.")
+        print("Invalid Birthday. Format must be YYYY-MM-DD and not in the future.")
         return False
     if not validation.is_valid_gender(gender):
         print("Invalid Gender. Must be 'male' or 'female'.")
@@ -642,7 +642,7 @@ def update_traveller(current_user: models.User, traveller_id: int, new_data: dic
         print("Invalid Last Name. Only letters, 2-30 characters.")
         return False
     if 'birthday' in new_data and not validation.is_valid_iso_date(new_data['birthday']):
-        print("Invalid Birthday. Format must be YYYY-MM-DD.")
+        print("Invalid Birthday. Format must be YYYY-MM-DD and not in the future.")
         return False
     if 'gender' in new_data and not validation.is_valid_gender(new_data['gender']):
         print("Invalid Gender. Must be 'male' or 'female'.")

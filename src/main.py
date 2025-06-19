@@ -172,7 +172,7 @@ def prompt_for_new_traveller():
     data = {}
     data['first_name'] = prompt_with_validation("Enter first name: ", validation.is_valid_first_name, "Only letters, 2-30 characters.")
     data['last_name'] = prompt_with_validation("Enter last name: ", validation.is_valid_last_name, "Only letters, 2-30 characters.")
-    data['birthday'] = prompt_with_validation("Enter birthday (YYYY-MM-DD): ", validation.is_valid_iso_date, "Format must be YYYY-MM-DD.")
+    data['birthday'] = prompt_with_validation("Enter birthday (YYYY-MM-DD): ", validation.is_valid_iso_date, "Format must be YYYY-MM-DD and not in the future.")
     data['gender'] = prompt_with_validation("Enter gender (male/female): ", validation.is_valid_gender, "Must be 'male' or 'female'.", str.lower)
     data['street_name'] = prompt_with_validation("Enter street name: ", validation.is_valid_street_name, "Letters and spaces, 2-50 characters.")
     data['house_number'] = prompt_with_validation("Enter house number: ", validation.is_valid_house_number, "1-6 digits.")
@@ -254,7 +254,7 @@ def prompt_for_new_scooter():
     data['last_maintenance_date'] = prompt_with_validation(
         "Enter last maintenance date (YYYY-MM-DD): ",
         validation.is_valid_iso_date,
-        "Format must be YYYY-MM-DD."
+        "Format must be YYYY-MM-DD and not in the future."
     )
     return data
 
@@ -337,7 +337,7 @@ def prompt_for_scooter_update(current_user: models.User):
     mileage = prompt_for_float("New mileage: ", min_val=0, optional=True)
     if mileage is not None: update_data['mileage'] = mileage
 
-    maint_date = prompt_with_validation("New last_maintenance_date (YYYY-MM-DD): ", validation.is_valid_iso_date, "Format must be YYYY-MM-DD.", optional=True)
+    maint_date = prompt_with_validation("New last_maintenance_date (YYYY-MM-DD): ", validation.is_valid_iso_date, "Format must be YYYY-MM-DD and not in the future.", optional=True)
     if maint_date: update_data['last_maintenance_date'] = maint_date
             
     if not update_data:
