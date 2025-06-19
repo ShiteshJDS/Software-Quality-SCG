@@ -39,8 +39,8 @@ def is_valid_password(password: str) -> bool:
     patterns = [
         r"(?=.*[a-z])",        # At least one lowercase letter
         r"(?=.*[A-Z])",        # At least one uppercase letter
-        r"(?=.*\\d)",           # At least one digit
-        r"(?=.*[~!@#$%^&*()_+=\`{}\[\]:;'<>,.?/|\\\\-])" # At least one special character
+        r"(?=.*\d)",           # At least one digit
+        r"(?=.*[~!@#$%^&*()_+=\`{}\[\]:;'<>,.?/|\\-])" # At least one special character
     ]
     
     full_pattern = "".join(patterns) + r".{12,30}$"
@@ -49,13 +49,13 @@ def is_valid_password(password: str) -> bool:
 def is_valid_zip_code(zip_code: str) -> bool:
     """Validates Zip Code format: DDDDXX."""
     if not _is_safe_string(zip_code): return False
-    pattern = r"^\\d{4}[A-Z]{2}$"
+    pattern = r"^\d{4}[A-Z]{2}$"
     return re.match(pattern, zip_code) is not None
 
 def is_valid_phone_digits(digits: str) -> bool:
     """Validates phone number digits: DDDDDDDD."""
     if not _is_safe_string(digits): return False
-    pattern = r"^\\d{8}$"
+    pattern = r"^\d{8}$"
     return re.match(pattern, digits) is not None
 
 def is_valid_driving_license(license_num: str) -> bool:
@@ -63,7 +63,7 @@ def is_valid_driving_license(license_num: str) -> bool:
     if not _is_safe_string(license_num): return False
     # This pattern precisely matches a 9-character string that is
     # either 1 letter followed by 8 digits, or 2 letters followed by 7 digits.
-    pattern = r"^(?:[A-Z]{1}\\d{8}|[A-Z]{2}\\d{7})$"
+    pattern = r"^(?:[A-Z]{1}\d{8}|[A-Z]{2}\d{7})$"
     return re.match(pattern, license_num.upper()) is not None
 
 def is_valid_scooter_serial(serial: str) -> bool:
@@ -120,7 +120,7 @@ def is_valid_last_name(name: str) -> bool:
 def is_valid_email(email: str) -> bool:
     """Validates email address format."""
     if not _is_safe_string(email): return False
-    pattern = r"^[\\w\\.-]+@[\\w\\.-]+\\.\\w{2,}$"
+    pattern = r"^[\w.-]+@[\w.-]+\.\w{2,}$"
     return re.match(pattern, email) is not None
 
 def is_valid_gender(gender: str) -> bool:
@@ -131,7 +131,8 @@ def is_valid_gender(gender: str) -> bool:
 def is_valid_house_number(house_number: str) -> bool:
     """Validates house number: 1-6 digits."""
     if not _is_safe_string(house_number): return False
-    return bool(re.match(r"^\\d{1,6}$", str(house_number)))
+    # Corrected the regex from \\d to \d to properly match digits.
+    return bool(re.match(r"^\d{1,6}$", str(house_number)))
 
 def is_valid_street_name(street: str) -> bool:
     """Validates street name: letters, spaces, 2-50 chars."""
