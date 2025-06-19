@@ -1,4 +1,4 @@
-# src/main.py
+# src/um_members.py
 
 import getpass
 import database, auth, config, services, models, validation
@@ -797,8 +797,8 @@ def temp_system_admin_handler(choice, current_user):
         # Super admin does not need a code
         services.restore_from_backup(current_user, filename, restore_code=None)
 
-def main():
-    """Main application entry point."""
+def um_members():
+    """um_members application entry point."""
     database.initialize_database()
     current_user = None
     
@@ -819,9 +819,9 @@ def main():
             # After the menu function returns (on logout), reset user and loop to login
             current_user = None
 
-if __name__ == "__main__":
+if __name__ == "__um_members__":
     try:
-        main()
+        um_members()
     except KeyboardInterrupt:
         print("\n\nApplication shutting down.")
     except Exception as e:

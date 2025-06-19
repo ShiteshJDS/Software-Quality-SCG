@@ -1,5 +1,5 @@
 Start the project with:
-python src/main.py
+python src/um_members.py
 
 When entering the password it is hidden by getpass, you are still typing
 
