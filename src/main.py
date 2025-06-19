@@ -137,7 +137,7 @@ def prompt_for_new_user(creator_role):
     }
 
 def print_user_syntax_rules():
-    print("""
+    print(r"""
 User Account Syntax Rules:
 - Username:
   - Length: 8-10 characters.
