@@ -99,10 +99,12 @@ def is_in_rotterdam_region(latitude: float, longitude: float) -> bool:
 
 
 def is_valid_iso_date(date_string: str) -> bool:
-    """Validates date format: YYYY-MM-DD."""
+    """Validates date format: YYYY-MM-DD and ensures it's not in the future."""
     if not _is_safe_string(date_string): return False
     try:
-        datetime.strptime(date_string, '%Y-%m-%d')
+        date_obj = datetime.strptime(date_string, '%Y-%m-%d').date()
+        if date_obj > datetime.now().date():
+            return False # Date is in the future
         return True
     except ValueError:
         return False

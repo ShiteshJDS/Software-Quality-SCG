@@ -51,5 +51,4 @@ class EncryptionManager:
             return decrypted_data.decode('utf-8')
         except InvalidToken:
             # This error occurs if the key is wrong or the data is corrupt
-            print("Error: Decryption failed. Invalid token or corrupted data.")
             return "" # Return empty string or handle as a critical error
