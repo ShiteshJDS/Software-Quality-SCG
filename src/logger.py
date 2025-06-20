@@ -16,15 +16,13 @@ class SecureLogger:
         date = now.strftime("%Y-%m-%d")
         time = now.strftime("%H:%M:%S")
         
-        # Encrypt sensitive log data
+        # Encrypt log data
         encrypted_username = self.encryption_manager.encrypt(username)
         encrypted_activity_desc = self.encryption_manager.encrypt(activity_desc)
         encrypted_additional_info = self.encryption_manager.encrypt(additional_info)
 
-        # Store the encrypted blob in the database
         conn = database.get_db_connection()
         cursor = conn.cursor()
-        # MODIFIED: Added the `is_read` column to the INSERT statement
         cursor.execute(
             "INSERT INTO logs (date, time, username, description_of_activity, additional_information, suspicious, is_read) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (date, time, encrypted_username, encrypted_activity_desc, encrypted_additional_info, 1 if is_suspicious else 0, 0)
@@ -38,7 +36,6 @@ class SecureLogger:
         """
         conn = database.get_db_connection()
         cursor = conn.cursor()
-        # MODIFIED: Select all columns including the new ones
         cursor.execute("SELECT * FROM logs ORDER BY id DESC LIMIT ?", (limit,))
         
         decrypted_logs = []

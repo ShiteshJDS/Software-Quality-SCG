@@ -20,10 +20,9 @@ def display_results(results: list[dict]):
         return
     
     headers = results[0].keys()
-    # Simple dynamic column width, with a max
     col_widths = {h: max(len(h), max((len(str(r.get(h, ''))) for r in results), default=0)) for h in headers}
     for h in col_widths:
-        col_widths[h] = min(col_widths[h], 30) # Max width to prevent overly wide columns
+        col_widths[h] = min(col_widths[h], 30)
 
     header_line = " | ".join(h.ljust(col_widths[h]) for h in headers)
     print("\n" + header_line)
@@ -267,17 +266,15 @@ def prompt_for_scooter_update(current_user: models.User):
     if scooter_id is None:
         return None, None
 
-    # Fetch current scooter data to validate location updates
     current_scooter = services.get_scooter_details(current_user, scooter_id)
     if not current_scooter:
-        return None, None # Error already printed by service
+        return None, None
 
     print("Enter new data. Press Enter to skip a field.")
     print_scooter_syntax_rules()
     
     update_data = {}
     
-    # Define editable fields based on role
     is_admin = current_user.role in [config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN]
     
     # --- Admin Fields ---
@@ -304,13 +301,11 @@ def prompt_for_scooter_update(current_user: models.User):
     min_soc = prompt_for_float("New target_range_soc_min: ", min_val=0, max_val=100, optional=True)
     if min_soc is not None: update_data['target_range_soc_min'] = min_soc
     
-    # Ensure max_soc is >= min_soc if both are updated
     max_soc_min = update_data.get('target_range_soc_min', 0)
     max_soc = prompt_for_float(f"New target_range_soc_max: ", min_val=max_soc_min, max_val=100, optional=True)
     if max_soc is not None: update_data['target_range_soc_max'] = max_soc
 
     # --- Location Update ---
-    # Loop until valid coordinates in the Rotterdam region are provided, or the user skips.
     while True:
         lat = prompt_with_validation("New location_lat (optional): ", validation.is_valid_location_coordinate, "Must be a valid coordinate.", optional=True)
         lon = prompt_with_validation("New location_lon (optional): ", validation.is_valid_location_coordinate, "Must be a valid coordinate.", optional=True)
@@ -319,18 +314,15 @@ def prompt_for_scooter_update(current_user: models.User):
         if not lat and not lon:
             break
 
-        # Determine the final coordinates for validation. Use existing if new is not provided.
         final_lat = float(lat) if lat else float(current_scooter['location_lat'])
         final_lon = float(lon) if lon else float(current_scooter['location_lon'])
 
         if validation.is_in_rotterdam_region(final_lat, final_lon):
-            # If valid, add the provided values to the update dictionary.
             if lat: update_data['location_lat'] = lat
             if lon: update_data['location_lon'] = lon
             break  # Exit the loop on success.
         else:
             print("Error: Location is outside of the Rotterdam region. Both latitude and longitude must be corrected or left blank.")
-            # Loop continues, prompting for both again.
 
     status = prompt_for_int("New out_of_service_status (0 or 1): ", min_val=0, max_val=1, optional=True)
     if status is not None: update_data['out_of_service_status'] = status
@@ -377,7 +369,6 @@ def handle_list_users(current_user: models.User):
     print_header("List Users")
     users = services.list_users(current_user)
     if users:
-        # Exclude password field from being displayed
         display_results([{"id": u.id, "username": u.username, "role": u.role, "first_name": u.first_name, "last_name": u.last_name, "registration_date": u.registration_date} for u in users])
 
 def prompt_for_user_update(current_user: models.User):
@@ -470,7 +461,6 @@ def handle_delete_own_account(current_user: models.User):
             print("Account deleted successfully. You will be logged out.")
             return True  # Signal to logout
         else:
-            # Error message already printed by service
             return False
     else:
         print("Account deletion cancelled.")
@@ -553,7 +543,6 @@ def show_super_admin_menu(current_user: models.User):
         elif choice == '3':
             try:
                 trav_id = int(input("Enter Traveller ID to update: "))
-                # Fetching all data again, can be optimized later
                 new_data = prompt_for_new_traveller() 
                 if new_data:
                     services.update_traveller(current_user, trav_id, new_data)
@@ -604,7 +593,6 @@ def show_super_admin_menu(current_user: models.User):
             services.create_backup(current_user)
         elif choice == '16':
             filename = input("Enter backup filename (e.g., backup_20250617_103000.zip): ")
-            # Super admin does not need a code for restore
             services.restore_from_backup(current_user, filename, restore_code=None)
         elif choice == '17':
             target_user = input("Enter System Admin username to generate code for: ")
@@ -737,7 +725,6 @@ def show_system_admin_menu(current_user: models.User):
 
 def temp_system_admin_handler(choice, current_user):
     """Temporary function to route choices for Super Admin to the System Admin logic."""
-    # This avoids duplicating all the handler code in the Super Admin menu
     
     # Traveller Actions
     if choice == '1':
@@ -783,7 +770,7 @@ def temp_system_admin_handler(choice, current_user):
         results = services.search_scooters(current_user, key)
         display_results(results)
     # User Actions
-    elif choice == '20': # This is handled by the Super Admin's '30'
+    elif choice == '20': # Dit is handled by the Super Admin's '30'
         print("Please use option 30 from the Super Admin menu to add users.")
     elif choice == '21':
         target_user = input("Enter username to reset password for: ")
@@ -795,7 +782,6 @@ def temp_system_admin_handler(choice, current_user):
         services.create_backup(current_user)
     elif choice == '82':
         filename = input("Enter backup filename (e.g., backup_20250617_103000.zip): ")
-        # Super admin does not need a code
         services.restore_from_backup(current_user, filename, restore_code=None)
 
 def um_members():
@@ -817,7 +803,6 @@ def um_members():
             elif current_user.role == config.ROLE_SERVICE_ENGINEER:
                 show_service_engineer_menu(current_user)
             
-            # After the menu function returns (on logout), reset user and loop to login
             current_user = None
 
 if __name__ == "__main__":

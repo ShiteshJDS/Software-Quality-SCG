@@ -9,7 +9,7 @@ from auth import hash_password
 def get_db_connection():
     """Establishes and returns a connection to the SQLite database."""
     conn = sqlite3.connect(config.DATABASE_FILE)
-    conn.row_factory = sqlite3.Row # Allows accessing columns by name
+    conn.row_factory = sqlite3.Row
     return conn
 
 def initialize_database():
@@ -131,8 +131,6 @@ def initialize_database():
     """)
     
     # --- Create logs table ---
-    # CORRECTED: Changed encrypted columns from TEXT to BLOB
-    # ADDED: is_read column for suspicious log alerts
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,7 +145,6 @@ def initialize_database():
     """)
 
     # --- Create restore_codes table ---
-    # NEW: Table for managing one-time backup restore codes
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS restore_codes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

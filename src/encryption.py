@@ -50,5 +50,4 @@ class EncryptionManager:
             decrypted_data = self.cipher.decrypt(encrypted_data)
             return decrypted_data.decode('utf-8')
         except InvalidToken:
-            # This error occurs if the key is wrong or the data is corrupt
-            return "" # Return empty string or handle as a critical error
+            return ""

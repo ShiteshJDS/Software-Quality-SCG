@@ -8,7 +8,6 @@ def _is_safe_string(s: str) -> bool:
     Internal check for unsafe characters, starting with null bytes, to prevent injection attacks.
     Returns False if the string is unsafe.
     """
-    # Add other checks here in the future if needed.
     if '\0' in str(s):
         return False
     return True
@@ -35,12 +34,11 @@ def is_valid_password(password: str) -> bool:
     if not 12 <= len(password) <= 30:
         return False
     
-    # Positive lookaheads to ensure each character type is present
     patterns = [
-        r"(?=.*[a-z])",        # At least one lowercase letter
-        r"(?=.*[A-Z])",        # At least one uppercase letter
-        r"(?=.*\d)",           # At least one digit
-        r"(?=.*[~!@#$%^&*()_+=\`{}\[\]:;'<>,.?/|\\-])" # At least one special character
+        r"(?=.*[a-z])",        
+        r"(?=.*[A-Z])",        
+        r"(?=.*\d)",           
+        r"(?=.*[~!@#$%^&*()_+=\`{}\[\]:;'<>,.?/|\\-])" 
     ]
     
     full_pattern = "".join(patterns) + r".{12,30}$"
@@ -61,8 +59,6 @@ def is_valid_phone_digits(digits: str) -> bool:
 def is_valid_driving_license(license_num: str) -> bool:
     """Validates Driving License: XXDDDDDDD or XDDDDDDDD."""
     if not _is_safe_string(license_num): return False
-    # This pattern precisely matches a 9-character string that is
-    # either 1 letter followed by 8 digits, or 2 letters followed by 7 digits.
     pattern = r"^(?:[A-Z]{1}\d{8}|[A-Z]{2}\d{7})$"
     return re.match(pattern, license_num.upper()) is not None
 
@@ -76,8 +72,6 @@ def is_valid_scooter_serial(serial: str) -> bool:
 def is_valid_location_coordinate(coord: str) -> bool:
     """Validates GPS coordinate format (a number with an optional sign and at least 5 decimal places for 2-meter accuracy)."""
     if not _is_safe_string(coord): return False
-    # This pattern ensures there are digits both before and after the decimal point,
-    # and at least 5 decimal places for accuracy.
     pattern = r"^[+-]?\d+\.\d{5,}$"
     return re.match(pattern, str(coord)) is not None
 
@@ -86,8 +80,7 @@ def is_in_rotterdam_region(latitude: float, longitude: float) -> bool:
     """
     Validates if the given GPS coordinates are within the Rotterdam region.
     """
-    # Bounding box for the Rotterdam region.
-    # These are approximate values and can be adjusted for more precision.
+    # Bounding box
     MIN_LAT, MAX_LAT = 51.8, 52.0
     MIN_LON, MAX_LON = 4.3, 4.6
 
@@ -104,7 +97,7 @@ def is_valid_iso_date(date_string: str) -> bool:
     try:
         date_obj = datetime.strptime(date_string, '%Y-%m-%d').date()
         if date_obj > datetime.now().date():
-            return False # Date is in the future
+            return False
         return True
     except ValueError:
         return False
@@ -133,7 +126,6 @@ def is_valid_gender(gender: str) -> bool:
 def is_valid_house_number(house_number: str) -> bool:
     """Validates house number: 1-6 digits."""
     if not _is_safe_string(house_number): return False
-    # Corrected the regex from \\d to \d to properly match digits.
     return bool(re.match(r"^\d{1,6}$", str(house_number)))
 
 def is_valid_street_name(street: str) -> bool:

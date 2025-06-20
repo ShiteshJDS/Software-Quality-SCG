@@ -6,8 +6,6 @@ import time
 import config, services, models, database
 from encryption import EncryptionManager
 
-# In-memory dictionary to track login attempts.
-# In a real-world application, this should be a more persistent store like Redis or a database table.
 login_attempts = {}
 encryption_manager = EncryptionManager(config.ENCRYPTION_KEY_FILE)
 
@@ -52,28 +50,22 @@ def login() -> models.User | None:
                 print(f"Too many failed login attempts. Please try again in {remaining_lockout:.0f} seconds.")
                 return None
             else:
-                # Lockout has expired, reset attempts
                 del login_attempts[username.lower()]
 
     password = getpass.getpass("Enter password: (When entering the password it is hidden by getpass, you are still typing) ") # Hides password input
 
     # --- Handle User Login (from Database) ---
-    # This process is necessarily slow as it requires decrypting all usernames.
-    # This is a security tradeoff: protects usernames at rest but impacts login performance.
     all_users_from_db = services.get_all_users_raw() # Gets all raw user data
     
     user_found = False
     for user_row in all_users_from_db:
         decrypted_username = services.encryption_manager.decrypt(user_row['username'])
         
-        # Case-insensitive comparison for username
         if decrypted_username.lower() == username.lower():
             user_found = True
-            # Username match found, now verify the password
             if verify_password(password, user_row['password_hash']):
                 print(f"Welcome, {decrypted_username}!")
 
-                # Reset failed login attempts for this user
                 if username.lower() in login_attempts:
                     del login_attempts[username.lower()]
 
@@ -85,12 +77,9 @@ def login() -> models.User | None:
 
                 return logged_in_user
             else:
-                # Password incorrect for this username, break and handle failure
                 break
 
     # --- Handle Failed Login ---
-    # If we get here, it means either the user wasn't found or the password was incorrect.
-    # We need to increment the failure count for the attempted username.
     if username.lower() in login_attempts:
         attempts, _ = login_attempts[username.lower()]
         login_attempts[username.lower()] = (attempts + 1, time.time())

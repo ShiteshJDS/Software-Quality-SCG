@@ -12,7 +12,6 @@ from encryption import EncryptionManager
 from logger import SecureLogger
 
 # --- Initialize Global Managers ---
-# These are instantiated once and used by the services layer.
 encryption_manager = EncryptionManager(config.ENCRYPTION_KEY_FILE)
 secure_logger = SecureLogger(encryption_manager)
 
@@ -32,7 +31,6 @@ def requires_role(allowed_roles: list[str]):
     return decorator
 
 # --- User Services ---
-
 def _find_user_by_username(username: str) -> sqlite3.Row | None:
     """Finds a user by their plaintext username by decrypting all usernames."""
     all_users = get_all_users_raw()
@@ -42,7 +40,7 @@ def _find_user_by_username(username: str) -> sqlite3.Row | None:
             if decrypted_username.lower() == username.lower():
                 return user_row
         except Exception:
-            continue # Skip records that fail to decrypt
+            continue
     return None
 
 def get_all_users_raw() -> list[sqlite3.Row]:
@@ -57,7 +55,7 @@ def get_all_users_raw() -> list[sqlite3.Row]:
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def add_new_user(current_user: models.User, username, password, role, first_name, last_name):
     """Adds a new user to the database after validation and encryption."""
-    # 1. Validate inputs
+    # 1. Validate
     if not validation.is_valid_username(username):
         print("Invalid username format.")
         return False
@@ -67,11 +65,9 @@ def add_new_user(current_user: models.User, username, password, role, first_name
     if role not in [config.ROLE_SERVICE_ENGINEER, config.ROLE_SYSTEM_ADMIN]:
         print("Invalid role specified.")
         return False
-    # A super admin cannot create another super admin
     if role == config.ROLE_SUPER_ADMIN:
         print("Cannot create another Super Administrator.")
         return False
-    # A system admin cannot create a super admin or another system admin
     if current_user.role == config.ROLE_SYSTEM_ADMIN and role == config.ROLE_SYSTEM_ADMIN:
         print("System administrators cannot create other system administrators.")
         return False
@@ -119,7 +115,6 @@ def update_user_profile(current_user: models.User, target_username: str, new_pro
     target_user_role = target_user_record['role']
     encrypted_target_username = target_user_record['username']
 
-    # Role-based authorization check
     if current_user.role == config.ROLE_SYSTEM_ADMIN and target_user_role != config.ROLE_SERVICE_ENGINEER:
         print("System Admins can only update Service Engineer profiles.")
         secure_logger.log(current_user.username, "Authorization failed", f"Attempted to update profile of {target_username} ({target_user_role})", is_suspicious=True)
@@ -129,7 +124,6 @@ def update_user_profile(current_user: models.User, target_username: str, new_pro
         print("No new data provided for update.")
         return False
 
-    # Build the update query dynamically based on provided data
     update_fields = {}
     if new_profile_data.get('first_name'):
         update_fields['first_name'] = encryption_manager.encrypt(new_profile_data['first_name'])
@@ -182,7 +176,6 @@ def delete_user(current_user: models.User, target_username: str):
     target_user_role = target_user_record['role']
     encrypted_target_username = target_user_record['username']
 
-    # Role-based authorization check
     if current_user.role == config.ROLE_SYSTEM_ADMIN and target_user_role != config.ROLE_SERVICE_ENGINEER:
         print("System Admins can only delete Service Engineers.")
         secure_logger.log(current_user.username, "Authorization failed", f"Attempted to delete user {target_username} ({target_user_role})", is_suspicious=True)
@@ -221,7 +214,6 @@ def reset_user_password(current_user: models.User, target_username: str):
         print(f"Error: User '{target_username}' not found.")
         return False
 
-    # Now we have the correct encrypted username from the record
     encrypted_target_username = target_user_record['username']
     
     # Generate a secure temporary password
@@ -254,7 +246,6 @@ def update_own_password(current_user: models.User, old_password: str, new_passwo
 
     conn = database.get_db_connection()
     cursor = conn.cursor()
-    # Use the user's ID for a reliable lookup.
     cursor.execute("SELECT password_hash FROM users WHERE id = ?", (current_user.id,))
     user_row = cursor.fetchone()
 
@@ -265,7 +256,6 @@ def update_own_password(current_user: models.User, old_password: str, new_passwo
         return False
         
     new_password_hash = auth.hash_password(new_password)
-    # Update the password using the user's ID.
     cursor.execute(
         "UPDATE users SET password_hash = ? WHERE id = ?",
         (new_password_hash, current_user.id)
@@ -287,7 +277,6 @@ def list_users(current_user: models.User) -> list[models.User]:
             try:
                 decrypted_users.append(auth.decrypt_user_row(user_row))
             except Exception:
-                # Log or handle users whose data cannot be decrypted
                 continue
         secure_logger.log(current_user.username, "Listed all users")
         return decrypted_users
@@ -322,7 +311,6 @@ def update_own_profile(current_user: models.User, new_profile_data: dict):
         conn.commit()
         secure_logger.log(current_user.username, "Updated own profile", f"Fields updated: {list(update_fields.keys())}")
         print("Profile updated successfully.")
-        # Update the current_user object in memory
         if 'first_name' in new_profile_data:
             current_user.first_name = new_profile_data['first_name']
         if 'last_name' in new_profile_data:
@@ -335,10 +323,9 @@ def update_own_profile(current_user: models.User, new_profile_data: dict):
         if 'conn' in locals() and conn:
             conn.close()
 
-@requires_role([config.ROLE_SYSTEM_ADMIN]) # Service Engineers cannot delete their own account as per spec
+@requires_role([config.ROLE_SYSTEM_ADMIN])
 def delete_own_account(current_user: models.User):
     """Allows a System Admin to delete their own account."""
-    # Super Admins cannot be deleted
     if current_user.role == config.ROLE_SUPER_ADMIN:
         print("Error: The Super Admin account cannot be deleted.")
         return False
@@ -449,11 +436,9 @@ def get_scooter_details(current_user: models.User, scooter_id: int) -> dict | No
 def update_scooter(current_user: models.User, scooter_id: int, updates: dict):
     """Updates a scooter's information based on the user's role."""
     allowed_updates = {}
-    # Define editable fields for each role
     service_engineer_fields = ['state_of_charge', 'target_range_soc_min', 'target_range_soc_max', 'location_lat', 'location_lon', 'out_of_service_status', 'mileage', 'last_maintenance_date']
     admin_fields = service_engineer_fields + ['brand', 'model', 'serial_number', 'top_speed', 'battery_capacity']
 
-    # Determine which fields the current user can edit
     if current_user.role == config.ROLE_SERVICE_ENGINEER:
         editable_fields = service_engineer_fields
     else: # Super Admin and System Admin
@@ -462,7 +447,6 @@ def update_scooter(current_user: models.User, scooter_id: int, updates: dict):
     # Filter the updates dictionary to only include editable fields
     for key, value in updates.items():
         if key in editable_fields:
-            # Validate input before adding to allowed_updates
             if key in ['location_lat', 'location_lon'] and not validation.is_valid_location_coordinate(value):
                 print(f"Invalid format for {key}. Must have at least 5 decimal places.")
                 return False
@@ -482,7 +466,7 @@ def update_scooter(current_user: models.User, scooter_id: int, updates: dict):
 
     encrypted_updates = {key: encryption_manager.encrypt(str(value)) for key, value in allowed_updates.items()}
 
-    # Construct the SQL query dynamically
+    # SQL query
     set_clause = ", ".join([f"{key} = ?" for key in encrypted_updates.keys()])
     sql_query = f"UPDATE scooters SET {set_clause} WHERE id = ?"
     params = list(encrypted_updates.values()) + [scooter_id]
@@ -514,7 +498,6 @@ def delete_scooter(current_user: models.User, scooter_id: int):
         conn = database.get_db_connection()
         cursor = conn.cursor()
 
-        # First, fetch the serial number for logging purposes before deleting.
         cursor.execute("SELECT serial_number FROM scooters WHERE id = ?", (scooter_id,))
         scooter_row = cursor.fetchone()
 
@@ -525,7 +508,6 @@ def delete_scooter(current_user: models.User, scooter_id: int):
         
         serial_number_for_log = f"ID: {scooter_id}"
         try:
-            # Decrypt for logging, but don't fail if it's not possible
             serial_number_for_log = encryption_manager.decrypt(scooter_row['serial_number'])
         except Exception:
             pass 
@@ -533,7 +515,6 @@ def delete_scooter(current_user: models.User, scooter_id: int):
         cursor.execute("DELETE FROM scooters WHERE id = ?", (scooter_id,))
 
         if cursor.rowcount == 0:
-            # This case should not be reached if the previous SELECT worked, but as a safeguard:
             print(f"Error: Scooter with ID '{scooter_id}' not found during deletion.")
             conn.close()
             return False
@@ -568,13 +549,9 @@ def search_scooters(current_user: models.User, search_key: str):
     searchable_fields = ['brand', 'model', 'serial_number']
 
     for row in all_scooters:
-        # Decrypt all fields to make them searchable and readable
         try:
             decrypted_row = {key: (encryption_manager.decrypt(value) if isinstance(value, bytes) else value) for key, value in dict(row).items()}
         except Exception:
-            # If decryption fails for a row, skip it or handle error
-            # For now, we just print a message and skip.
-            # print(f"Warning: Could not decrypt row {row['id']}, skipping.")
             continue
 
         match = False
@@ -706,7 +683,6 @@ def search_travellers(current_user: models.User, search_key: str):
 @requires_role([config.ROLE_SUPER_ADMIN, config.ROLE_SYSTEM_ADMIN])
 def update_traveller(current_user: models.User, traveller_id: int, new_data: dict):
     """Updates an existing traveller's information."""
-    # Validate fields if present in update
     if 'first_name' in new_data and not validation.is_valid_first_name(new_data['first_name']):
         print("Invalid First Name. Only letters, 2-30 characters.")
         return False
@@ -746,7 +722,6 @@ def update_traveller(current_user: models.User, traveller_id: int, new_data: dic
     conn = database.get_db_connection()
     cursor = conn.cursor()
     
-    # Dynamically build the SET part of the query
     set_clause = ", ".join([f"{key} = ?" for key in encrypted_data.keys()])
     params = list(encrypted_data.values())
     params.append(traveller_id)
@@ -811,7 +786,6 @@ def create_backup(current_user: models.User):
 def generate_restore_code(current_user: models.User, target_system_admin_username: str, backup_filename: str):
     """Generates a one-time restore code for a System Administrator."""
     # Verify target user is a System Admin
-    # ... (omitted for brevity)
 
     code = secrets.token_hex(16)
     encrypted_code = encryption_manager.encrypt(code)
@@ -843,7 +817,6 @@ def revoke_restore_code(current_user: models.User, code_to_revoke: str):
         conn = database.get_db_connection()
         cursor = conn.cursor()
 
-        # Find the code by decrypting all active (is_used = 0) codes
         cursor.execute("SELECT id, code FROM restore_codes WHERE is_used = 0")
         all_active_codes = cursor.fetchall()
 
@@ -855,14 +828,12 @@ def revoke_restore_code(current_user: models.User, code_to_revoke: str):
                     code_id_to_revoke = row['id']
                     break
             except Exception:
-                # Ignore codes that fail to decrypt
                 continue
 
         if code_id_to_revoke is None:
             print("Error: Active restore code not found or it has already been used/revoked.")
             return False
 
-        # Mark the code as 'used' to effectively revoke it
         cursor.execute("UPDATE restore_codes SET is_used = 1 WHERE id = ?", (code_id_to_revoke,))
         conn.commit()
 
@@ -871,7 +842,6 @@ def revoke_restore_code(current_user: models.User, code_to_revoke: str):
             print("Restore code has been successfully revoked.")
             return True
         else:
-            # This case should ideally not be hit if the ID was found
             print("Error: Failed to revoke the code in the database.")
             return False
     except Exception as e:
@@ -909,7 +879,6 @@ def restore_from_backup(current_user: models.User, backup_filename: str, restore
             conn.close()
             return False
             
-        # Invalidate the code
         cursor.execute("UPDATE restore_codes SET is_used = 1 WHERE id = ?", (code_data['id'],))
         conn.commit()
         conn.close()
@@ -950,7 +919,6 @@ def mark_logs_as_read(log_ids: list[int]):
         return
     conn = database.get_db_connection()
     cursor = conn.cursor()
-    # Create a placeholder string like (?, ?, ?)
     placeholders = ', '.join('?' for _ in log_ids)
     query = f"UPDATE logs SET is_read = 1 WHERE id IN ({placeholders}) AND suspicious = 1"
     cursor.execute(query, log_ids)

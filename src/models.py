@@ -6,7 +6,7 @@ from datetime import datetime
 @dataclass
 class User:
     id: int
-    username: str # This will hold the DECRYPTED username for in-memory use
+    username: str
     role: str
     first_name: str
     last_name: str
@@ -40,8 +40,8 @@ class Scooter:
     state_of_charge: int
     target_range_soc_min: int
     target_range_soc_max: int
-    location_lat: str  # Changed to str
-    location_lon: str  # Changed to str
+    location_lat: str
+    location_lon: str
     out_of_service_status: bool
     mileage: int
     last_maintenance_date: str
