@@ -1,4 +1,5 @@
 # src/um_members.py
+# to run, run in terminal: python src/um_members.py
 
 import getpass
 import database, auth, config, services, models, validation
