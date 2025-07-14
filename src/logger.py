@@ -5,9 +5,9 @@ import database, config
 from encryption import EncryptionManager
 
 # Voorbeelden van acties die wij als verdacht hebben aangemerkt in services.py zijn:
-# Een autorisatiefout, bijvoorbeeld een Service Engineer die een admin-functie probeert uit te voeren23.
-# Het verwijderen van een gebruiker of een scooter24.
-# Het resetten van een wachtwoord25.
+# Een autorisatiefout, bijvoorbeeld een Service Engineer die een admin-functie probeert uit te voeren.
+# Het verwijderen van een gebruiker of een scooter.
+# Het resetten van een wachtwoord.
 # Een mislukte poging om de database te herstellen vanaf een back-up.
 # Een gebruiker die zijn eigen account verwijdert.
 
