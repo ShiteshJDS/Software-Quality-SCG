@@ -4,11 +4,19 @@ from datetime import datetime
 import database, config
 from encryption import EncryptionManager
 
+# Voorbeelden van acties die wij als verdacht hebben aangemerkt in services.py zijn:
+# Een autorisatiefout, bijvoorbeeld een Service Engineer die een admin-functie probeert uit te voeren23.
+# Het verwijderen van een gebruiker of een scooter24.
+# Het resetten van een wachtwoord25.
+# Een mislukte poging om de database te herstellen vanaf een back-up.
+# Een gebruiker die zijn eigen account verwijdert.
+
 class SecureLogger:
     def __init__(self, encryption_manager: EncryptionManager):
         self.encryption_manager = encryption_manager
 
-    def log(self, username: str, activity_desc: str, additional_info: str = "", is_suspicious: bool = False):
+    def log(self, username: str, activity_desc: str, additional_info: str = "", 
+            : bool = False):
         """
         Creates a formatted log entry, encrypts it, and saves it to the database.
         """
